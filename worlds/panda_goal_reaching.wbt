@@ -1,0 +1,34 @@
+#VRML_SIM R2022b utf8
+
+EXTERNPROTO "../protos/PandaHand.proto"
+EXTERNPROTO "../protos/panda.proto"
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2022b/projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2022b/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2022b/projects/objects/floors/protos/RectangleArena.proto"
+
+IMPORTABLE EXTERNPROTO "../protos/ScenicObject.proto"
+IMPORTABLE EXTERNPROTO "../protos/ScenicObjectWithPhysics.proto"
+
+
+WorldInfo {
+}
+Viewpoint {
+  orientation 0.28244274396169955 0.14118682279487899 -0.9488373819851711 2.2584618148396287
+  position 1.461170622944754 1.552783363961073 1.837398080071648
+}
+TexturedBackground {
+}
+TexturedBackgroundLight {
+}
+RectangleArena {
+  floorSize 2 2
+  wallHeight 1e-05
+}
+DEF PANDA panda{
+  name "Supervisor"
+  controller "scenic_supervisor"
+  customData "../scenarios/panda_goal_reaching.scenic"
+  supervisor TRUE
+}
+
