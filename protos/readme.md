@@ -1,1 +1,0 @@
-Protos define the webots objects for the simulation. In order to see how to connect a robot proto to a concrete Scenic object veiw the "Franka" object in ../scenarios/library.scenic.
