@@ -15,4 +15,6 @@ This folder has some of the preliminary structure for implementing RL in webots 
    2. reward function
    3. Any other relevent simulation details
 
+6. To run your program open Webots from inside your venv via the "Webots" command and open your corresponding world file (.wbt) within webots.
+
    
