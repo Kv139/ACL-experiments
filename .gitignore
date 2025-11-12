@@ -3,3 +3,5 @@ Metadrive/Scenarios/controllers
 
 # run data
 Metadrive/runs
+
+*.pyc
