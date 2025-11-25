@@ -27,7 +27,7 @@ class Args:
     """seed of the experiment"""
     torch_deterministic: bool = True
     """if toggled, `torch.backends.cudnn.deterministic=False`"""
-    cuda: bool = True
+    cuda: bool = False
     """if toggled, cuda will be enabled by default"""
     track: bool = False
     """if toggled, this experiment will be tracked with Weights and Biases"""
@@ -106,33 +106,27 @@ def make_env(env_id, idx, capture_video, run_name, gamma):
         scenario = scenic.scenarioFromFile(args.scenic_file,
                                            model=args.model,
                                            mode2D=True)
-        meta_config = dict(
-            sensors={"sementic_camera": [SemanticCamera, (16,16)]},
-            vehicle_config={"image_source": "sementic_camera"},
-            stack_size=3,
-        )
-        
-
+        #shape was [100 200   3]
         # OBS needs to be updated
-        observation_space = gym.spaces.Box(low=np.array([-1,-1]), high=np.array([1,1]), shape=(2,), dtype=np.float32)  # Defines the possible actions of the agent
+        observation_space = gym.spaces.Box(low=0, high=1, shape=(84,64,3), dtype=np.float32)  # Defines the possible actions of the agent
         
         action_space = gym.spaces.Box(low=np.array([-1,-1]), high=np.array([1,1]), shape=(2,), dtype=np.float32)  # Defines the possible actions of the agent
 
         env = CustomMetaDriveEnv(
             scenario=scenario,
-            simulator=CustomMetaDriveSimulator(sumo_map=args.map),
+            simulator=CustomMetaDriveSimulator(sumo_map=args.map,max_steps=args.max_steps),
             max_steps=args.max_steps,
             observation_space=observation_space,
             action_space=action_space
         )
 
-        # env = gym.wrappers.FlattenObservation(env)  # deal with dm_control's Dict observation space
+        env = gym.wrappers.FlattenObservation(env)  # deal with dm_control's Dict observation space
         env = gym.wrappers.RecordEpisodeStatistics(env)
-        # env = gym.wrappers.ClipAction(env)
-        # env = gym.wrappers.NormalizeObservation(env)
-        # env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10))
-        # env = gym.wrappers.NormalizeReward(env, gamma=gamma)
-        # env = gym.wrappers.TransformReward(env, lambda reward: np.clip(reward, -10, 10))
+        env = gym.wrappers.ClipAction(env)
+        env = gym.wrappers.NormalizeObservation(env)
+        # env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10), observation_space=observation_space)
+        env = gym.wrappers.NormalizeReward(env, gamma=gamma)
+        env = gym.wrappers.TransformReward(env, lambda reward: np.clip(reward, -10, 10))
         return env
 
     return thunk
@@ -257,6 +251,8 @@ if __name__ == "__main__":
             rewards[step] = torch.tensor(reward).to(device).view(-1)
             next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(next_done).to(device)
 
+            envs.call("log_episode_stats", rewards[step],values[step])
+
             if "final_info" in infos:
                 for info in infos["final_info"]:
                     if info and "episode" in info:
@@ -278,8 +274,6 @@ if __name__ == "__main__":
                     nextvalues = values[t + 1]
                 delta = rewards[t] + args.gamma * nextvalues * nextnonterminal - values[t]
                 advantages[t] = lastgaelam = delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam
-            positive_value_loss = np.mean([max(0,advantage) for advantage in advantages])
-            envs.log_pvl(positive_value_loss)
             returns = advantages + values
 
         # flatten the batch
