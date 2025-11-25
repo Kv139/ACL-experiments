@@ -2,6 +2,8 @@ from scenic.gym import ScenicGymEnv
 import scenic
 from custom.custom_simulator import CustomMetaDriveSimulation, CustomMetaDriveSimulator 
 from custom.custom_gym import CustomMetaDriveEnv
+
+from scenic.simulators.metadrive import MetaDriveSimulator
 #from custom_env import MetaDriveEnv
 
 import gymnasium as gym
@@ -31,7 +33,7 @@ observation_space = gym.spaces.Dict({
     "rotation": gym.spaces.Box(low=np.array([-1,-1,-1,-1]), high=np.array([1,1,1,1]), shape=(4,), dtype=np.float64)
 })
                              
-max_steps = 10000
+max_steps = 100
 episodes  = 100
 total_timesteps = max_steps * episodes
 
@@ -39,25 +41,34 @@ scenario = scenic.scenarioFromFile("./scenarios/driver.scenic",
                                 model="scenic.simulators.metadrive.model",
                                 mode2D=True)
              
-meta_config = dict(
-    sensors={"sementic_camera": [SemanticCamera, (16,16)]},
-    vehicle_config={"image_source": "sementic_camera"},
-    stack_size=3,
-)
 
 env = CustomMetaDriveEnv(
                 scenario=scenario, 
-                simulator=CustomMetaDriveSimulator(sumo_map="./CARLA/Town01.net.xml"),
-                max_steps=max_steps,
+                simulator=CustomMetaDriveSimulator(sumo_map="./CARLA/Town01.net.xml", max_steps=max_steps),
                 observation_space=observation_space,
                 action_space=action_space) # max_step is max step for an episode - Create an enviroment instance
 
+""""
+Testing something
+"""
+import torch
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+print(f"displyaing device: {device}")
 
-# print(dir(env))
+print("entering env")
 env.reset()
-for i in range(4):
-    observation, reward, terminated, truncated, info = env.step([0,0])
+print("resetting")
+terminated, truncated = False, False
+for i in range(100):
+    print(f"truncated: {truncated}")
+    if terminated or truncated:
+        print("early break")
+        break
+    else:
+        observation, reward, terminated, truncated, info = env.step([0,1])
 
-    print(observation)
+        
+
+    # print(reward)
 
