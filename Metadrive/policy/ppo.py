@@ -103,9 +103,12 @@ class Args:
 def make_env(env_id, idx, capture_video, run_name, gamma):
     def thunk():
 
-        scenario = scenic.scenarioFromFile(args.scenic_file,
+
+        scenarios = []
+        for _ in range(2):
+            scenarios.append(scenic.scenarioFromFile(args.scenic_file,
                                            model=args.model,
-                                           mode2D=True)
+                                            mode2D=True))
         #shape was [100 200   3]
         # OBS needs to be updated
         observation_space = gym.spaces.Box(low=0, high=1, shape=(84,64,3), dtype=np.float32)  # Defines the possible actions of the agent
@@ -113,7 +116,7 @@ def make_env(env_id, idx, capture_video, run_name, gamma):
         action_space = gym.spaces.Box(low=np.array([-1,-1]), high=np.array([1,1]), shape=(2,), dtype=np.float32)  # Defines the possible actions of the agent
 
         env = CustomMetaDriveEnv(
-            scenario=scenario,
+            scenarios=scenarios,
             simulator=CustomMetaDriveSimulator(sumo_map=args.map,max_steps=args.max_steps),
             max_steps=args.max_steps,
             observation_space=observation_space,
