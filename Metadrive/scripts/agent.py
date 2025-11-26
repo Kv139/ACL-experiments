@@ -37,13 +37,17 @@ max_steps = 100
 episodes  = 100
 total_timesteps = max_steps * episodes
 
-scenario = scenic.scenarioFromFile("./scenarios/driver.scenic",
+scenario1 = scenic.scenarioFromFile("./scenarios/driver.scenic",
+                                model="scenic.simulators.metadrive.model",
+                                mode2D=True)
+
+scenario2 = scenic.scenarioFromFile("./scenarios/driver.scenic",
                                 model="scenic.simulators.metadrive.model",
                                 mode2D=True)
              
 
 env = CustomMetaDriveEnv(
-                scenario=scenario, 
+                scenarios=[scenario1,scenario2], 
                 simulator=CustomMetaDriveSimulator(sumo_map="./CARLA/Town01.net.xml", max_steps=max_steps),
                 observation_space=observation_space,
                 action_space=action_space) # max_step is max step for an episode - Create an enviroment instance
