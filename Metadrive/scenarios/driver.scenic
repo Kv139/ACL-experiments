@@ -26,6 +26,7 @@ def get_nearest_centerline(obj):
 			centerline = lane.centerline
 	return centerline
 
+# TODO fix params -- need more variabiltiy and ensure that modified scenes make!
 param select_road = Uniform(*network.roads)
 param select_lane = Uniform(*globalParameters.select_road.lanes)
 
@@ -41,20 +42,20 @@ ego.previous_coordinates = [0,0]
 monitor DrivingReward(obj, select_lane=globalParameters.select_lane):
 	while True:
 		ego.previous_coordinates = obj.position
-		if select_lane:
-			centerline = select_lane.centerline
+		# if select_lane:
+		# 	centerline = select_lane.centerline
+		# else:
+		lane = obj._lane
+		if lane:
+			centerline = lane.centerline	
 		else:
-			lane = obj._lane
-			if lane:
-				centerline = lane.centerline	
-			else:
-				centerline = get_nearest_centerline(obj)
-	
+			centerline = get_nearest_centerline(obj)
+
 		nearest_line_points = centerline.nearestSegmentTo(obj.position)
 		nearest_line_segmenet = PolylineRegion(nearest_line_points)
 		
 		cte = abs(distance to nearest_line_segmenet)
-		if cte < .1:
+		if cte < .1: 
 			reward=1
 		else:
 			reward =  -cte + 0.1 * ego.speed
