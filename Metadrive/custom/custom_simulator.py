@@ -11,6 +11,8 @@ from metadrive.envs import MetaDriveEnv
 from scenic.gym import ScenicGymEnv
 from scenic.domains.driving.simulators import DrivingSimulation
 from metadrive.component.sensors.rgb_camera import RGBCamera
+from metadrive.component.sensors.semantic_camera import SemanticCamera
+from metadrive.component.sensors.lidar import Lidar
 import numpy as np
 """Simulator interface for MetaDrive."""
 
@@ -147,11 +149,11 @@ class CustomMetaDriveSimulation(DrivingSimulation):
                             converted_position,
                             converted_heading,
                         ],
-                        "image_source":"rgb_camera",  
+                        "image_source":"semnatic_camera",  
                     },
                     use_mesh_terrain=self.render3D,
                     log_level=logging.CRITICAL,
-                    sensors={"rgb_camera": (RGBCamera, *sensor_size)},
+                    sensors={"semantic_camera": (SemanticCamera, *sensor_size)},
                     stack_size=1,
                     image_observation=True,
                 )
@@ -317,9 +319,9 @@ class CustomMetaDriveSimulation(DrivingSimulation):
         # print(dir(self.client.engine))
         # print(dir(self.client.vehicle))
 
-        rgb =  self.client.engine.get_sensor("rgb_camera")
+        sem_camera =  self.client.engine.get_sensor("semantic_camera")
 
-        obs = np.array(rgb.perceive())
+        obs = np.array(sem_camera.perceive())
 
         # print(f"shape was {np.array(obs.shape)}")
         # print(f" observation was {obs}")
