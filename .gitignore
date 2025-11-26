@@ -4,4 +4,6 @@ Metadrive/Scenarios/controllers
 # run data
 Metadrive/runs
 
+Webots/worlds/*.wbproj
+
 *.pyc
