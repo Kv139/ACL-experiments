@@ -48,12 +48,14 @@ class Args:
     # Scenic specific arguments
     scenic_file: str = "./scenarios/driver.scenic" 
     """the scenic program defining the enviroment"""
-    max_steps: int = 1000
+    max_steps: int = 10
     """the maximum number of steps for any given episode"""
     model : str = "scenic.simulators.metadrive.model"
     """ underlying model for the scenic file """
     map: str = "./CARLA/Town01.net.xml"
     """ Sumo map for the env"""
+    sampler_type: str = "halton"
+    """ sampling type for generating scenes"""
 
     # Algorithm specific arguments
     env_id: str = "ACL_MetaDrive"
@@ -102,13 +104,11 @@ class Args:
 
 def make_env(env_id, idx, capture_video, run_name, gamma):
     def thunk():
-
-
-        scenarios = []
-        for _ in range(2):
-            scenarios.append(scenic.scenarioFromFile(args.scenic_file,
-                                           model=args.model,
-                                            mode2D=True))
+   
+        scenario = (scenic.scenarioFromFile(args.scenic_file,
+                                        model=args.model,
+                                        mode2D=True,
+                                        params={"verifaiSamplerType": args.sampler_type}))
         #shape was [100 200   3]
         # OBS needs to be updated
         observation_space = gym.spaces.Box(low=0, high=1, shape=(84,64,3), dtype=np.float32)  # Defines the possible actions of the agent
@@ -116,11 +116,12 @@ def make_env(env_id, idx, capture_video, run_name, gamma):
         action_space = gym.spaces.Box(low=np.array([-1,-1]), high=np.array([1,1]), shape=(2,), dtype=np.float32)  # Defines the possible actions of the agent
 
         env = CustomMetaDriveEnv(
-            scenarios=scenarios,
+            scenario=scenario,
             simulator=CustomMetaDriveSimulator(sumo_map=args.map,max_steps=args.max_steps),
             max_steps=args.max_steps,
             observation_space=observation_space,
-            action_space=action_space
+            action_space=action_space,
+            file = args.scenic_file
         )
 
         env = gym.wrappers.FlattenObservation(env)  # deal with dm_control's Dict observation space
