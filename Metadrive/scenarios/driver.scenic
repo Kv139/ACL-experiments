@@ -8,6 +8,8 @@ param verifaiSamplerType = 'halton'
 param render = 0
 param use2DMap = True
 
+param extra_cars = 3
+
 import numpy as np
 TERMINATE_TIME = 40 / globalParameters.time_step
 
@@ -19,7 +21,7 @@ easily mutating later
 
 def get_nearest_centerline(obj):
 	min_dist = np.inf
-	for lane in globalParameters.select_road.lanes:
+	for lane in network.lanes:
 		dist = distance to lane
 		if dist < min_dist:
 			min_dist = dist
@@ -28,40 +30,60 @@ def get_nearest_centerline(obj):
 
 # TODO fix params -- need more variabiltiy and ensure that modified scenes make!
 param select_road = Uniform(*network.roads)
-param select_lane = Uniform(*globalParameters.select_road.lanes)
+param distractor_road = Uniform(*network.roads)
 
-param start_x = Uniform(*globalParameters.select_lane.centerline.points[0])
-param start_y = Uniform(*globalParameters.select_lane.centerline.points[1])
+param select_lane = Uniform(*network.lanes)
+param distractor_lane = Uniform(*network.lanes)
 
+start = Uniform(*globalParameters.select_lane.centerline.points)
+start2 = Uniform(*globalParameters.distractor_lane.centerline.points)
 
-start = (globalParameters.start_x @ globalParameters.start_y)
+start = (start[0] @ start[1])
+start2 = (start2[0] @ start2[1])
 
-ego = new Car on start, with observation 0, with cte 0 
-ego.previous_coordinates = [0,0]
+ego = new Car on start, facing roadDirection, with observation 0, with cte 0 
+# ego.previous_coordinates = [0,0]
 
-monitor DrivingReward(obj, select_lane=globalParameters.select_lane):
+for id in range(globalParameters.extra_cars):
+	new Car with behavior DriveAvoidingCollisions()
+
+distractor = new Car on start2, with behavior DriveAvoidingCollisions(target_speed=15, avoidance_threshold=12)
+
+monitor DrivingReward(obj):
 	while True:
 		ego.previous_coordinates = obj.position
-		# if select_lane:
-		# 	centerline = select_lane.centerline
-		# else:
 		lane = obj._lane
+
 		if lane:
 			centerline = lane.centerline	
 		else:
 			centerline = get_nearest_centerline(obj)
 
+		if obj._lane:
+			ego.lane_heading = lane._defaultHeadingAt(ego.position)
+			orientation_error = np.abs(ego.heading - lane._defaultHeadingAt(ego.position))
+			ego.orientation_error = orientation_error
+
+			if orientation_error > .05:
+				orientation_error =  max(-orientation_error, -3)
+			else:
+				orientation_error = 0
+
 		nearest_line_points = centerline.nearestSegmentTo(obj.position)
-		nearest_line_segmenet = PolylineRegion(nearest_line_points)
+		nearest_line_segment = PolylineRegion(nearest_line_points)
 		
-		cte = abs(distance to nearest_line_segmenet)
-		if cte < .1: 
-			reward=1
-		else:
-			reward =  -cte + 0.1 * ego.speed
-		
+		cte = min(abs(distance to nearest_line_segment),1)
+		if cte < .2: 
+			cte = 0
+		speed_reward = max(0.05 * ego.speed, 1/2)
+
+		dist_reward = distance to ego.previous_coordinates
+
+		reward =  -cte + speed_reward + orientation_error + dist_reward
+
 		ego.reward = reward
+
 		wait
 	
 
-require monitor DrivingReward(ego,None)
+require monitor DrivingReward(ego)
