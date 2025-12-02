@@ -118,6 +118,7 @@ class CustomMetaDriveSimulation(DrivingSimulation):
         self.early_terminate = False
         self.max_steps = max_steps
         self.steps_taken = 0
+        self.rewards = []
         super().__init__(scene, timestep=timestep, **kwargs)
 
     def createObjectInSimulator(self, obj):
@@ -223,7 +224,6 @@ class CustomMetaDriveSimulation(DrivingSimulation):
         # action = ego_obj._collect_action()
         self.client.step([self.actions[0], self.actions[1]])  # Apply action in the simulator
         ego_obj._reset_control()
-
         # Render the scene in 2D if needed
         if self.render and not self.render3D:
             self.client.render(
@@ -239,6 +239,9 @@ class CustomMetaDriveSimulation(DrivingSimulation):
         self.steps_taken += 1
 
     def destroy(self):
+
+        print(np.mean(self.rewards))
+
         if self.client and self.client.engine:
             object_ids = list(self.client.engine._spawned_objects.keys())
             if object_ids:
@@ -323,6 +326,9 @@ class CustomMetaDriveSimulation(DrivingSimulation):
 
         obs = np.array(sem_camera.perceive())
 
+        # print(f'Checking roadDeviation for ego: {self.scene.objects[0].roadDeviation}')
+
+
         # print(f"shape was {np.array(obs.shape)}")
         # print(f" observation was {obs}")
         # lidar = self.client.engine.get_sensor("lidar")
@@ -352,16 +358,17 @@ class CustomMetaDriveSimulation(DrivingSimulation):
         if np.any([state[key] for key in keys]):
             self.early_terminate = True
             print("crash")
-            reward = -10
+            return -10
         elif self.scene.objects[0]._lane is None and self.scene.objects[0]._intersection is None:
             print("out of lane")
             self.early_terminate = True
-            reward = -10 # Ego is no longer on the map
-        elif self.max_steps == self.steps_taken:
-            reward = 5 # finish the episode without leaving the road
+            return -10 # Ego is no longer on the map
+        elif self.max_steps == self.steps_taken-1:
+            print("finished episode")
+            return 5 # finish the episode without leaving the road
         else:
             reward= self.scene.objects[0].reward
-
+        self.rewards.append(reward)
         return reward
     
     def get_info(self):
@@ -374,5 +381,10 @@ class CustomMetaDriveSimulation(DrivingSimulation):
         info = {}
         info['crash'] = np.any([state[key] for key in keys])
         info['cte'] = self.scene.objects[0].cte
+        info["road_deviation"] = self.scene.objects[0].roadDeviation
         return info
+    
+    
+    def get_feedback(self):
+        return 0
 
