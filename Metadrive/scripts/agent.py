@@ -60,18 +60,18 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 print(f"displyaing device: {device}")
 
-print("entering env")
 env.reset()
-print("resetting")
 terminated, truncated = False, False
-for i in range(100):
-    print(f"truncated: {truncated}")
-    if terminated or truncated:
-        print("early break")
-        break
-    else:
-        observation, reward, terminated, truncated, info = env.step([0,1])
-
+for episode in range(10):
+    for i in range(100):
+        print(f"truncated: {truncated}")
+        if terminated or truncated:
+            print("early break")
+            break
+        else:
+            observation, reward, terminated, truncated, info = env.step([0,1])
+            print(info)
+    env.reset()
         
 
     # print(reward)
