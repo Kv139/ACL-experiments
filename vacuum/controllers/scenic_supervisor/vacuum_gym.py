@@ -332,8 +332,6 @@ class CustomWebotsGym(gym.Env):
         except (SerializationError, KeyError, RejectionException):
             print(f"SerializationError, KeyError, or RejectionException: occured returning new Scene")
             print(f"failed id was {id}, scenario was genetic {modified_scenario}")
-            # print(f"previous scenes was {self.previous_scenes}")
-            # print(f"episode plvs was {self.episode_plvs}")
             if modified_scenario:
                 self.info["genetic_failures"] += 1
             else:
@@ -381,7 +379,6 @@ class CustomWebotsGym(gym.Env):
                 new_scene, _ = scenario.generate()
 
         elif params != {} and objects is None:
-            print(f"this should never happen \n THIS SHOULD NEVER HAPPEN params were {params}")
             try: 
                 scenario = scenic.scenarioFromFile(self.scenic_file, model="scenic.simulators.webots.model",mode2D=False,params=params)
             except InvalidScenarioError:
