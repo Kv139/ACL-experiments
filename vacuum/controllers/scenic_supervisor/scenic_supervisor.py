@@ -4,11 +4,11 @@ import random
 import time
 import scenic
 from dataclasses import dataclass
-from metadrive.component.sensors.semantic_camera import SemanticCamera
 
 #TODO build out customr envs/simulators
-from custom.custom_simulator import CustomWebotsSimulator 
-from custom.custom_gym import CustomWebotsGym
+from vacuum_simulator import CustomrWebotsSimulator
+from vacuum_gym import CustomWebotsGym
+from controller import Supervisor
 
 
 import gymnasium as gym
@@ -20,6 +20,10 @@ import tyro
 from torch.distributions.normal import Normal
 from torch.utils.tensorboard import SummaryWriter
 
+from scenic.core.errors import setDebuggingOptions
+
+setDebuggingOptions(verbosity=0, fullBacktrace=True, debugExceptions=False, debugRejections=False)
+
 
 @dataclass
 class Args:
@@ -29,7 +33,7 @@ class Args:
     """seed of the experiment"""
     torch_deterministic: bool = True
     """if toggled, `torch.backends.cudnn.deterministic=False`"""
-    cuda: bool = False
+    cuda: bool = True
     """if toggled, cuda will be enabled by default"""
     track: bool = False
     """if toggled, this experiment will be tracked with Weights and Biases"""
@@ -39,7 +43,7 @@ class Args:
     """the entity (team) of wandb's project"""
     capture_video: bool = False
     """whether to capture videos of the agent performances (check out `videos` folder)"""
-    save_model: bool = False
+    save_model: bool = True
     """whether to save model into the `runs/{run_name}` folder"""
     upload_model: bool = False
     """whether to upload the saved model to huggingface"""
@@ -48,19 +52,25 @@ class Args:
 
 
     # Scenic specific arguments
-    scenic_file: str = "./scenarios/driver.scenic" 
+    scenic_file: str = "../../scenarios/vacuum.scenic" 
     """the scenic program defining the enviroment"""
-    max_steps: int = 10
+    max_steps: int = 15000
     """the maximum number of steps for any given episode"""
-    model : str = "scenic.simulators.metadrive.model"
+    model : str = "scenic.simulators.webots.model"
     """ underlying model for the scenic file """
-    map: str = "./CARLA/Town01.net.xml"
-    """ Sumo map for the env"""
-    sampler_type: str = "halton"
+    sampler_type: str = "mab"
     """ sampling type for generating scenes"""
+    evaluate_model: bool = False
+    """ Choose whether to train or skip to evalutation"""
+    model_to_evaluate_path: str = "./runs/ACL_Webots__scenic_supervisor__1__1764782422/scenic_supervisor.cleanrl_model"
+    """Path for model to evaluate"""
+    model_name: str = "ep15_timesteps_1m_mab"
+    """ model name"""
+    apply_genetic_ops = False
+    """ flag to signal genetic operations for scene contsruction"""
 
     # Algorithm specific arguments
-    env_id: str = "ACL_MetaDrive"
+    env_id: str = "ACL_Webots"
     """the id of the environment"""
     total_timesteps: int = 1000000
     """total timesteps of the experiments"""
@@ -106,31 +116,42 @@ class Args:
 
 def make_env(env_id, idx, capture_video, run_name, gamma):
     def thunk():
-   
-        scenario = (scenic.scenarioFromFile(args.scenic_file,
+        print(f"Generating scenario with sampler: {args.sampler_type}")
+        scenario = (scenic.scenarioFromFile(
+                                        args.scenic_file,
                                         model=args.model,
-                                        mode2D=True,
+                                        mode2D=False,
                                         params={"verifaiSamplerType": args.sampler_type}))
+        supervisor = Supervisor()
         #shape was [100 200   3]
         # OBS needs to be updated
-        observation_space = gym.spaces.Box(low=0, high=1, shape=(84,64,3), dtype=np.float32)  # Defines the possible actions of the agent
-        
+        #TODO fix obs and action space
         action_space = gym.spaces.Box(low=np.array([-1,-1]), high=np.array([1,1]), shape=(2,), dtype=np.float32)  # Defines the possible actions of the agent
 
-        env = CustomMetaDriveEnv(
+        observation_space = gym.spaces.Dict({
+            "velocity": gym.spaces.Box(low=np.array([-1, -1]), high=np.array([1, 1]), shape=(2,),dtype=np.float64),
+            "sensor": gym.spaces.Box(low=np.array([0,0,0,0,0,0,0]), high=np.array([1,1,1,1,1,1,1]),shape=(7,),dtype=np.float64), # defines the range of observations of the agent
+            "position": gym.spaces.Box(low=np.array([-1, -1]), high=np.array([1, 1]), shape=(2,),dtype=np.float64),
+            "rotation": gym.spaces.Box(low=np.array([-1,-1,-1,-1]), high=np.array([1,1,1,1]), shape=(4,), dtype=np.float64),
+            "coverage": gym.spaces.Box(low=0, high=1, dtype=np.float64)
+        })
+
+
+        env = CustomWebotsGym(
             scenario=scenario,
-            simulator=CustomMetaDriveSimulator(sumo_map=args.map,max_steps=args.max_steps),
+            simulator=CustomrWebotsSimulator(supervisor=supervisor),
             max_steps=args.max_steps,
             observation_space=observation_space,
             action_space=action_space,
-            file = args.scenic_file
+            file = args.scenic_file,
+            genetic_flag=args.apply_genetic_ops
         )
 
         env = gym.wrappers.FlattenObservation(env)  # deal with dm_control's Dict observation space
         env = gym.wrappers.RecordEpisodeStatistics(env)
         env = gym.wrappers.ClipAction(env)
         env = gym.wrappers.NormalizeObservation(env)
-        # env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10), observation_space=observation_space)
+        env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10))
         env = gym.wrappers.NormalizeReward(env, gamma=gamma)
         env = gym.wrappers.TransformReward(env, lambda reward: np.clip(reward, -10, 10))
         return env
@@ -206,168 +227,176 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
-    device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
-
-    # env setup
     envs = gym.vector.SyncVectorEnv(
-        [make_env(args.env_id, i, args.capture_video, run_name, args.gamma) for i in range(args.num_envs)]
-    )
+    [make_env(args.env_id, i, args.capture_video, run_name, args.gamma) for i in range(args.num_envs)])
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
+
+    device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
     agent = Agent(envs).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
-    # ALGO Logic: Storage setup
-    obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
-    actions = torch.zeros((args.num_steps, args.num_envs) + envs.single_action_space.shape).to(device)
-    logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
-    rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
-    dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
-    values = torch.zeros((args.num_steps, args.num_envs)).to(device)
 
-    # TRY NOT TO MODIFY: start the game
-    global_step = 0
-    start_time = time.time()
-    next_obs, _ = envs.reset(seed=args.seed)
-    next_obs = torch.Tensor(next_obs).to(device)
-    next_done = torch.zeros(args.num_envs).to(device)
+    if not args.evaluate_model:
+        # env setup
 
-    for iteration in range(1, args.num_iterations + 1):
-        # Annealing the rate if instructed to do so.
-        if args.anneal_lr:
-            frac = 1.0 - (iteration - 1.0) / args.num_iterations
-            lrnow = frac * args.learning_rate
-            optimizer.param_groups[0]["lr"] = lrnow
+        # ALGO Logic: Storage setup
+        obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
+        actions = torch.zeros((args.num_steps, args.num_envs) + envs.single_action_space.shape).to(device)
+        logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
+        rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
+        dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
+        values = torch.zeros((args.num_steps, args.num_envs)).to(device)
 
-        for step in range(0, args.num_steps):
-            global_step += args.num_envs
-            obs[step] = next_obs
-            dones[step] = next_done
+        # TRY NOT TO MODIFY: start the game
+        global_step = 0
+        start_time = time.time()
+        next_obs, _ = envs.reset(seed=args.seed)
+        next_obs = torch.Tensor(next_obs).to(device)
+        next_done = torch.zeros(args.num_envs).to(device)
 
-            # ALGO LOGIC: action logic
-            with torch.no_grad():
-                action, logprob, _, value = agent.get_action_and_value(next_obs)
-                values[step] = value.flatten()
-            actions[step] = action
-            logprobs[step] = logprob
+        for iteration in range(1, args.num_iterations + 1):
+            # Annealing the rate if instructed to do so.
+            if args.anneal_lr:
+                frac = 1.0 - (iteration - 1.0) / args.num_iterations
+                lrnow = frac * args.learning_rate
+                optimizer.param_groups[0]["lr"] = lrnow
 
-            # TRY NOT TO MODIFY: execute the game and log data.
-            next_obs, reward, terminations, truncations, infos = envs.step(action.cpu().numpy())
-            next_done = np.logical_or(terminations, truncations)
-            rewards[step] = torch.tensor(reward).to(device).view(-1)
-            next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(next_done).to(device)
+            for step in range(0, args.num_steps):
+                global_step += args.num_envs
+                obs[step] = next_obs
+                dones[step] = next_done
 
-            envs.call("log_episode_stats", rewards[step],values[step])
-
-            if "final_info" in infos:
-                for info in infos["final_info"]:
-                    if info and "episode" in info:
-                        print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
-                        writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
-                        writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
-
-        # bootstrap value if not done
-        with torch.no_grad():
-            next_value = agent.get_value(next_obs).reshape(1, -1)
-            advantages = torch.zeros_like(rewards).to(device)
-            lastgaelam = 0
-            for t in reversed(range(args.num_steps)):
-                if t == args.num_steps - 1:
-                    nextnonterminal = 1.0 - next_done
-                    nextvalues = next_value
-                else:
-                    nextnonterminal = 1.0 - dones[t + 1]
-                    nextvalues = values[t + 1]
-                delta = rewards[t] + args.gamma * nextvalues * nextnonterminal - values[t]
-                advantages[t] = lastgaelam = delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam
-            returns = advantages + values
-
-        # flatten the batch
-        b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
-        b_logprobs = logprobs.reshape(-1)
-        b_actions = actions.reshape((-1,) + envs.single_action_space.shape)
-        b_advantages = advantages.reshape(-1)
-        b_returns = returns.reshape(-1)
-        b_values = values.reshape(-1)
-
-        # Optimizing the policy and value network
-        b_inds = np.arange(args.batch_size)
-        clipfracs = []
-        for epoch in range(args.update_epochs):
-            np.random.shuffle(b_inds)
-            for start in range(0, args.batch_size, args.minibatch_size):
-                end = start + args.minibatch_size
-                mb_inds = b_inds[start:end]
-
-                _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs[mb_inds], b_actions[mb_inds])
-                logratio = newlogprob - b_logprobs[mb_inds]
-                ratio = logratio.exp()
-
+                # ALGO LOGIC: action logic
                 with torch.no_grad():
-                    # calculate approx_kl http://joschu.net/blog/kl-approx.html
-                    old_approx_kl = (-logratio).mean()
-                    approx_kl = ((ratio - 1) - logratio).mean()
-                    clipfracs += [((ratio - 1.0).abs() > args.clip_coef).float().mean().item()]
+                    action, logprob, _, value = agent.get_action_and_value(next_obs)
+                    values[step] = value.flatten()
+                actions[step] = action
+                logprobs[step] = logprob
 
-                mb_advantages = b_advantages[mb_inds]
-                if args.norm_adv:
-                    mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
+                # TRY NOT TO MODIFY: execute the game and log data.
+                next_obs, reward, terminations, truncations, infos = envs.step(action.cpu().numpy())
+                next_done = np.logical_or(terminations, truncations)
+                rewards[step] = torch.tensor(reward).to(device).view(-1)
+                next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(next_done).to(device)
 
-                # Policy loss
-                pg_loss1 = -mb_advantages * ratio
-                pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - args.clip_coef, 1 + args.clip_coef)
-                pg_loss = torch.max(pg_loss1, pg_loss2).mean()
+                envs.call("log_episode_stats", rewards[step],values[step])
 
-                # Value loss
-                newvalue = newvalue.view(-1)
-                if args.clip_vloss:
-                    v_loss_unclipped = (newvalue - b_returns[mb_inds]) ** 2
-                    v_clipped = b_values[mb_inds] + torch.clamp(
-                        newvalue - b_values[mb_inds],
-                        -args.clip_coef,
-                        args.clip_coef,
-                    )
-                    v_loss_clipped = (v_clipped - b_returns[mb_inds]) ** 2
-                    v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
-                    v_loss = 0.5 * v_loss_max.mean()
-                else:
-                    v_loss = 0.5 * ((newvalue - b_returns[mb_inds]) ** 2).mean()
+                if "final_info" in infos:
+                    for info in infos["final_info"]:
+                        if info and "episode" in info:
+                            print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
+                            writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
+                            writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
 
-                entropy_loss = entropy.mean()
-                loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef
+            # bootstrap value if not done
+            with torch.no_grad():
+                next_value = agent.get_value(next_obs).reshape(1, -1)
+                advantages = torch.zeros_like(rewards).to(device)
+                lastgaelam = 0
+                for t in reversed(range(args.num_steps)):
+                    if t == args.num_steps - 1:
+                        nextnonterminal = 1.0 - next_done
+                        nextvalues = next_value
+                    else:
+                        nextnonterminal = 1.0 - dones[t + 1]
+                        nextvalues = values[t + 1]
+                    delta = rewards[t] + args.gamma * nextvalues * nextnonterminal - values[t]
+                    advantages[t] = lastgaelam = delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam
+                returns = advantages + values
 
-                optimizer.zero_grad()
-                loss.backward()
-                nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
-                optimizer.step()
+            # flatten the batch
+            b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
+            b_logprobs = logprobs.reshape(-1)
+            b_actions = actions.reshape((-1,) + envs.single_action_space.shape)
+            b_advantages = advantages.reshape(-1)
+            b_returns = returns.reshape(-1)
+            b_values = values.reshape(-1)
 
-            if args.target_kl is not None and approx_kl > args.target_kl:
-                break
+            # Optimizing the policy and value network
+            b_inds = np.arange(args.batch_size)
+            clipfracs = []
+            for epoch in range(args.update_epochs):
+                np.random.shuffle(b_inds)
+                for start in range(0, args.batch_size, args.minibatch_size):
+                    end = start + args.minibatch_size
+                    mb_inds = b_inds[start:end]
 
-        y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
-        var_y = np.var(y_true)
-        explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
+                    _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs[mb_inds], b_actions[mb_inds])
+                    logratio = newlogprob - b_logprobs[mb_inds]
+                    ratio = logratio.exp()
 
-        # TRY NOT TO MODIFY: record rewards for plotting purposes
-        writer.add_scalar("charts/learning_rate", optimizer.param_groups[0]["lr"], global_step)
-        writer.add_scalar("losses/value_loss", v_loss.item(), global_step)
-        writer.add_scalar("losses/policy_loss", pg_loss.item(), global_step)
-        writer.add_scalar("losses/entropy", entropy_loss.item(), global_step)
-        writer.add_scalar("losses/old_approx_kl", old_approx_kl.item(), global_step)
-        writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
-        writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
-        writer.add_scalar("losses/explained_variance", explained_var, global_step)
-        print("SPS:", int(global_step / (time.time() - start_time)))
-        writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
+                    with torch.no_grad():
+                        # calculate approx_kl http://joschu.net/blog/kl-approx.html
+                        old_approx_kl = (-logratio).mean()
+                        approx_kl = ((ratio - 1) - logratio).mean()
+                        clipfracs += [((ratio - 1.0).abs() > args.clip_coef).float().mean().item()]
+
+                    mb_advantages = b_advantages[mb_inds]
+                    if args.norm_adv:
+                        mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
+
+                    # Policy loss
+                    pg_loss1 = -mb_advantages * ratio
+                    pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - args.clip_coef, 1 + args.clip_coef)
+                    pg_loss = torch.max(pg_loss1, pg_loss2).mean()
+
+                    # Value loss
+                    newvalue = newvalue.view(-1)
+                    if args.clip_vloss:
+                        v_loss_unclipped = (newvalue - b_returns[mb_inds]) ** 2
+                        v_clipped = b_values[mb_inds] + torch.clamp(
+                            newvalue - b_values[mb_inds],
+                            -args.clip_coef,
+                            args.clip_coef,
+                        )
+                        v_loss_clipped = (v_clipped - b_returns[mb_inds]) ** 2
+                        v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
+                        v_loss = 0.5 * v_loss_max.mean()
+                    else:
+                        v_loss = 0.5 * ((newvalue - b_returns[mb_inds]) ** 2).mean()
+
+                    entropy_loss = entropy.mean()
+                    loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef
+
+                    optimizer.zero_grad()
+                    loss.backward()
+                    nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
+                    optimizer.step()
+
+                if args.target_kl is not None and approx_kl > args.target_kl:
+                    break
+
+            y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
+            var_y = np.var(y_true)
+            explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
+
+            # TRY NOT TO MODIFY: record rewards for plotting purposes
+            writer.add_scalar("charts/learning_rate", optimizer.param_groups[0]["lr"], global_step)
+            writer.add_scalar("losses/value_loss", v_loss.item(), global_step)
+            writer.add_scalar("losses/policy_loss", pg_loss.item(), global_step)
+            writer.add_scalar("losses/entropy", entropy_loss.item(), global_step)
+            writer.add_scalar("losses/old_approx_kl", old_approx_kl.item(), global_step)
+            writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
+            writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
+            writer.add_scalar("losses/explained_variance", explained_var, global_step)
+            print("SPS:", int(global_step / (time.time() - start_time)))
+            writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
 
     if args.save_model:
-        model_path = f"runs/{run_name}/{args.exp_name}.cleanrl_model"
+        model_path = f"final_models/{args.model_name}.cleanrl_model"
         torch.save(agent.state_dict(), model_path)
         print(f"model saved to {model_path}")
+        
+    if args.evaluate_model:
         from cleanrl_utils.evals.ppo_eval import evaluate
-
+        
+        assert args.sampler_type == "random", "You forgot to use random sampling try again"
+    
+        print("evaluating model")
         episodic_returns = evaluate(
-            model_path,
+            envs,
+            args.model_to_evaluate_path,
             make_env,
             args.env_id,
             eval_episodes=10,
@@ -379,12 +408,7 @@ if __name__ == "__main__":
         for idx, episodic_return in enumerate(episodic_returns):
             writer.add_scalar("eval/episodic_return", episodic_return, idx)
 
-        if args.upload_model:
-            from cleanrl_utils.huggingface import push_to_hub
 
-            repo_name = f"{args.env_id}-{args.exp_name}-seed{args.seed}"
-            repo_id = f"{args.hf_entity}/{repo_name}" if args.hf_entity else repo_name
-            push_to_hub(args, episodic_returns, repo_id, "PPO", f"runs/{run_name}", f"videos/{run_name}-eval")
 
     envs.close()
     writer.close()
