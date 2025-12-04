@@ -17,7 +17,7 @@ import numpy as np
 import random
 import scenic
 
-from scenic.core.errors import setDebuggingOptions
+from scenic.core.errors import setDebuggingOptions, InvalidScenarioError
 
 setDebuggingOptions(verbosity=0, fullBacktrace=False, debugExceptions=False, debugRejections=False)
 
@@ -30,7 +30,7 @@ class ResetException(Exception):
 
 class CustomMetaDriveEnv(gym.Env):
     """
-    verifai_sampler now not an argument added in here, but one specified int he Scenic program
+    verifai_sampler now not an argument added in here, but one specified in the Scenic program
     """
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 4} # TODO placeholder, add simulator-specific entries
     
@@ -253,7 +253,7 @@ class CustomMetaDriveEnv(gym.Env):
             then condidtions the distribution to them and resamples
             If no valid sample is found returns the original program
         """ 
-        mutable_params = ["select_road", 'distractor_road',"extra_cars" ] 
+        mutable_params = ["select_road","extra_cars" ] 
         conditioned_params = {}
         idx = random.randint(0,len(mutable_params)-1)
 
@@ -291,6 +291,7 @@ class CustomMetaDriveEnv(gym.Env):
                                 mode2D=True,
                                 params=params)
         else:
+            params = {}
             scenario =  self.scenario
         
         try: 
@@ -325,7 +326,11 @@ class CustomMetaDriveEnv(gym.Env):
                  saves those params so the program can be reconstructed later
         """
         if params is not {}:
-            scenario = scenic.scenarioFromFile(self.scenic_file, model="scenic.simulators.metadrive.model",mode2D=True,params=params)
+            try:
+                scenario = scenic.scenarioFromFile(self.scenic_file, model="scenic.simulators.metadrive.model",mode2D=True,params=params)
+            except InvalidScenarioError:
+                print('Invalid Scearnio instance returning original program')
+                scenario = self.scenario
 
             self.previous_scenes_params[self.curr_scene_id] = params
             try: 
