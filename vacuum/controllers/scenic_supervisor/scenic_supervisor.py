@@ -52,21 +52,21 @@ class Args:
 
 
     # Scenic specific arguments
-    scenic_file: str = "../../scenarios/vacuum.scenic" 
+    scenic_file: str = "../../scenarios/vacuum_revised.scenic" 
     """the scenic program defining the enviroment"""
-    max_steps: int = 15000
+    max_steps: int = 10000
     """the maximum number of steps for any given episode"""
     model : str = "scenic.simulators.webots.model"
     """ underlying model for the scenic file """
-    sampler_type: str = "mab"
+    sampler_type: str = "halton"
     """ sampling type for generating scenes"""
     evaluate_model: bool = False
     """ Choose whether to train or skip to evalutation"""
     model_to_evaluate_path: str = "./runs/ACL_Webots__scenic_supervisor__1__1764782422/scenic_supervisor.cleanrl_model"
     """Path for model to evaluate"""
-    model_name: str = "ep15_timesteps_1m_mab"
+    model_name: str = "ep15_timesteps_1m_halton"
     """ model name"""
-    apply_genetic_ops = False
+    apply_genetic_ops = True
     """ flag to signal genetic operations for scene contsruction"""
 
     # Algorithm specific arguments
