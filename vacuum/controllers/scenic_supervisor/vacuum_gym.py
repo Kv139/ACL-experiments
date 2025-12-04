@@ -6,7 +6,7 @@ from typing import Callable
 
 from scenic.core.simulators import Simulator, Simulation
 from scenic.core.scenarios import Scenario, Scene
-from scenic.core.distributions import RejectionException 
+from scenic.core.distributions import RejectionException, RandomControlFlowError
 from scenic.core.serialization import SerializationError
 import gymnasium as gym
 from gymnasium import spaces
@@ -64,7 +64,9 @@ class CustomWebotsGym(gym.Env):
         self.episode_counter = 0 # id to map instances
         self.episode_plvs = {}
         self.previous_scenes = {}
+        self.previous_scenarios = {}
         self.previous_scenes_params = {}
+        self.mutable_scenario = None
 
 
         self.gae_lambda = 0.95
@@ -181,7 +183,6 @@ class CustomWebotsGym(gym.Env):
                 advantages[t] = max(advantages[t],0)        
             
             pvl = np.sum(advantages)/len(advantages)
-            print("compute_pvl called")
             if not self.genetic_flag:
                 # Comput Sampler feedbach such that values < .15 are > 0, SO sampler tries to find scenes with value > .15
                 result = -np.tanh(pvl) + 0.1
@@ -189,12 +190,10 @@ class CustomWebotsGym(gym.Env):
                 print(f"feedback result was {self.feedback_result} with raw pvl of {pvl}")
                 return 
 
-            if pvl > self.pvl_threshold or self.curr_scene_id < 10:
-                self.episode_plvs[self.curr_scene_id] = np.sum(advantages)/len(advantages)
-                self.curr_scene_id += 1
+            if pvl > self.pvl_threshold or len(list(self.episode_plvs.items())) < 10:
+                self.episode_plvs[self.episode_counter] = np.sum(advantages)/len(advantages)
         else:
-            self.episode_plvs[self.curr_scene_id] = 0
-            self.curr_scene_id +=1
+            self.episode_plvs[self.episode_counter] = 0
     
     def get_scene(self):
         """
@@ -211,12 +210,11 @@ class CustomWebotsGym(gym.Env):
         self.select_best_scenes()
       
         if self.episode_counter < 5:
-            self.curr_scene_id = self.episode_counter
             scene = self.generate_scene()
             self.info['generations'] += 1
 
   
-        elif self.episode_counter >= 10 and self.episode_counter % 2 == 0: # TODO adjust timing conditions 50/50 exploitation vrs. exploration
+        elif self.episode_counter >= 5 and self.episode_counter % 2 == 0: # TODO adjust timing conditions 50/50 exploitation vrs. exploration
             idx1 = random.choice(self.best_scene_ids) #TODO fix size
             choice = random.random()
             if choice < .5: #TODO fix logic -- debugging
@@ -234,9 +232,8 @@ class CustomWebotsGym(gym.Env):
         else:
             choice = random.random()
             if choice < .5:
-                idx = random.choice(self.best_scene_ids)
-                self.curr_scene_id = idx
-                scene = self.read_scene_bytes(idx)
+                curr_scene_id = random.choice(self.best_scene_ids)
+                scene = self.read_scene_bytes(curr_scene_id)
                 self.info['replays'] += 1
             else:
                 scene = self.generate_scene()
@@ -251,17 +248,24 @@ class CustomWebotsGym(gym.Env):
         Generate a new program with traits from two differnt programs 
         """
         self.info['crossovers'] +=1
-        mutable_params = [key for key in scene1.params.keys()]
         
-        params = scene1.params
-        for key in mutable_params:
-            choice = random.random()
-            if choice < .5:
-                params[key] = scene2.params[key]        
+        obj_sc1 = []
+        obj_sc2 = []
+        assert len(scene1.objects) == len(scene2.objects)
 
-        new_scene = self.generate_scene(params=params)
+        ch1 = random.choice(range(len(scene1.objects)))
 
-        return new_scene 
+        options = [idx for idx in range(len(scene1.objects)) if idx != ch1]
+        ch2 = random.choice(options)
+    
+        obj_sc1.append(ch1)
+        obj_sc2.append(ch2)
+        obj_sc2.append(ch1)
+
+        scene1_conditioned = self.generate_scene(scene=scene1,objects=obj_sc1)
+        final_conditioned = self.generate_scene(scene=scene1_conditioned, objects=obj_sc2)
+
+        return final_conditioned 
     
     def mutate_scene(self,scene):
         """
@@ -273,14 +277,11 @@ class CustomWebotsGym(gym.Env):
             If no valid sample is found returns the original program
         """ 
         self.info['mutations'] += 1
-        conditioned_params = {}
 
-        for key, value in scene.params.items():
-            flip = random.random()
-            if flip < .5:
-                conditioned_params[key] = value 
+        object = random.choice(range(len(scene.objects)))
+        objects = [object]
        
-        new_scene = self.generate_scene(params=conditioned_params)
+        new_scene = self.generate_scene(objects=objects,scene=scene)
         return new_scene
 
 
@@ -301,6 +302,7 @@ class CustomWebotsGym(gym.Env):
         :param scene_bytes: Scenic program written to bytes
         returns: Scene
         """
+        modified_scenario = False
         if id in self.previous_scenes_params:
             params = self.previous_scenes_params[id]
             # TODO I make this same call multiple times -- consider creating a seperate function
@@ -311,7 +313,12 @@ class CustomWebotsGym(gym.Env):
                                     params=params)
             except InvalidScenarioError:
                 scenario = self.scenario
-     
+
+        elif id in self.previous_scenarios:
+            modified_scenario = True
+            params = {}
+            scenario = self.previous_scenarios[id]
+
         else:
             params = {}
             scenario =  self.scenario
@@ -322,11 +329,11 @@ class CustomWebotsGym(gym.Env):
             bytes = self.previous_scenes[id]
             return scenario.sceneFromBytes(bytes)
         
-        except (SerializationError, KeyError):
-            print(f"SerializationError or KeyError occured returning new Scene")
-            print(f"failed id was {id}")
-            print(f"previous scenes was {self.previous_scenes}")
-            print(f"episode plvs was {self.episode_plvs}")
+        except (SerializationError, KeyError, RejectionException):
+            print(f"SerializationError, KeyError, or RejectionException: occured returning new Scene")
+            print(f"failed id was {id}, scenario was genetic {modified_scenario}")
+            # print(f"previous scenes was {self.previous_scenes}")
+            # print(f"episode plvs was {self.episode_plvs}")
             """
             Remove broken training scenario or Key from the retained values to prevent reoccurance
             """
@@ -340,21 +347,44 @@ class CustomWebotsGym(gym.Env):
             return scene
 
 
-    def generate_scene(self,params={}):
+    def generate_scene(self,params={},objects=None,scene=None):
         """
         Generate a new Scenario 
             (1): If no params are passed generates a new scene from the original program
             (2): If custom params are passed compiles a new program with these values and 
                  saves those params so the program can be reconstructed later
         """
-        if params is not {}:
+        if objects:
+            assert scene is not None
+ 
+            try: 
+                scenario = scenic.scenarioFromFile(self.scenic_file, model="scenic.simulators.webots.model",mode2D=False,params={})
+            except InvalidScenarioError:
+                scenario = self.scenario
+
+            try:
+                scenario.conditionOn(scene=scene,objects=objects)
+                new_scene, _ = scenario.generate()
+                self.previous_scenarios[self.episode_counter] = scenario
+
+            except (RejectionException,RandomControlFlowError):
+                print(f"Control flow error with objects {objects}")
+                for i in range(len(scene.objects)):
+                    if i in objects:
+                        print(scene.objects[i])
+
+                scenario = self.scenario
+                new_scene, _ = scenario.generate()
+
+        elif params != {} and objects is None:
+            print(f"this should never happen \n THIS SHOULD NEVER HAPPEN params were {params}")
             try: 
                 scenario = scenic.scenarioFromFile(self.scenic_file, model="scenic.simulators.webots.model",mode2D=False,params=params)
             except InvalidScenarioError:
                 print('Invalid Scenario instance returning original program')
                 scenario = self.scenario
 
-            self.previous_scenes_params[self.curr_scene_id] = params
+            self.previous_scenes_params[self.episode_counter] = params
             try: 
                 new_scene, _ = scenario.generate()
             
@@ -367,7 +397,11 @@ class CustomWebotsGym(gym.Env):
             new_scene, _ =  scenario.generate()
         
         bytes = scenario.sceneToBytes(new_scene)
-        self.previous_scenes[self.curr_scene_id] = bytes
+        self.previous_scenes[self.episode_counter] = bytes
 
         return new_scene
+    
+
+
+
 
