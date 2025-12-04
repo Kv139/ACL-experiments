@@ -8,7 +8,7 @@ param verifaiSamplerType = 'halton'
 param render = 0
 param use2DMap = True
 
-param extra_cars = 3
+param extra_cars = 1
 
 import numpy as np
 TERMINATE_TIME = 40 / globalParameters.time_step
@@ -29,10 +29,12 @@ def get_nearest_centerline(obj):
 	return centerline
 
 # TODO fix params -- need more variabiltiy and ensure that modified scenes make!
+
+
 param select_road = Uniform(*network.roads)
 param distractor_road = Uniform(*network.roads)
 
-param select_lane = Uniform(*network.lanes)
+param select_lane = Uniform(*network.lanegoups)
 param distractor_lane = Uniform(*network.lanes)
 
 start = Uniform(*globalParameters.select_lane.centerline.points)
@@ -42,12 +44,13 @@ start = (start[0] @ start[1])
 start2 = (start2[0] @ start2[1])
 
 ego = new Car on start, facing roadDirection, with observation 0, with cte 0 
+distractor = new Car on start2, with behavior DriveAvoidingCollisions(target_speed=10, avoidance_threshold=12)
+
 # ego.previous_coordinates = [0,0]
 
-for id in range(globalParameters.extra_cars):
-	new Car with behavior DriveAvoidingCollisions()
+# for id in range(globalParameters.extra_cars):
+# 	new Car with behavior DriveAvoidingCollisions()
 
-distractor = new Car on start2, with behavior DriveAvoidingCollisions(target_speed=15, avoidance_threshold=12)
 
 monitor DrivingReward(obj):
 	while True:
@@ -67,7 +70,7 @@ monitor DrivingReward(obj):
 			if orientation_error > .05:
 				orientation_error =  max(-orientation_error, -3)
 			else:
-				orientation_error = 0
+				orientation_error = 1 # postive reward for the correct orientation
 
 		nearest_line_points = centerline.nearestSegmentTo(obj.position)
 		nearest_line_segment = PolylineRegion(nearest_line_points)
@@ -75,7 +78,7 @@ monitor DrivingReward(obj):
 		cte = min(abs(distance to nearest_line_segment),1)
 		if cte < .2: 
 			cte = 0
-		speed_reward = max(0.05 * ego.speed, 1/2)
+		speed_reward = max(0.5 * ego.speed, 2) # postiive reward for driving fast
 
 		dist_reward = distance to ego.previous_coordinates
 
