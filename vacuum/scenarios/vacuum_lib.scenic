@@ -16,7 +16,7 @@ class Vacuum(WebotsObject):
     width: 0.335
     length: 0.335
     height: 0.07
-    customData:  "../../vacuum.scenic"
+    customData:  "./vacuum.scenic"
     Supervisor: True
     controller: "scenic_supervisor"
     resetController: False
@@ -42,7 +42,7 @@ class Wall(WebotsObject):
 
 class DiningTable(WebotsObject):
     webotsAdhoc: {'physics': False}
-    shape: MeshShape.fromFile(localPath("../../../assets/meshes/dining_table.obj.bz2"))
+    shape: MeshShape.fromFile(localPath("../../../Scenic/assets/meshes/dining_table.obj.bz2"))
     width: Range(0.7, 1.5)
     length: Range(0.7, 1.5)
     height: 0.75
@@ -51,7 +51,7 @@ class DiningTable(WebotsObject):
 
 class DiningChair(WebotsObject):
     webotsAdhoc: {'physics': False}
-    shape: MeshShape.fromFile(localPath("../../../assets/meshes/dining_chair.obj.bz2"), initial_rotation=(180 deg, 0, 0))
+    shape: MeshShape.fromFile(localPath("../../../Scenic/assets/meshes/dining_chair.obj.bz2"), initial_rotation=(180 deg, 0, 0))
     width: 0.4
     length: 0.4
     height: 1
@@ -62,7 +62,7 @@ class DiningChair(WebotsObject):
 
 class Couch(WebotsObject):
     webotsAdhoc: {'physics': False}
-    shape: MeshShape.fromFile(localPath("../../../assets/meshes/couch.obj.bz2"), initial_rotation=(-90 deg, 0, 0))
+    shape: MeshShape.fromFile(localPath("../../../Scenic/assets/meshes/couch.obj.bz2"), initial_rotation=(-90 deg, 0, 0))
     width: 2
     length: 0.75
     height: 0.75
@@ -72,7 +72,7 @@ class Couch(WebotsObject):
 
 class CoffeeTable(WebotsObject):
     webotsAdhoc: {'physics': False}
-    shape: MeshShape.fromFile(localPath("../../../assets/meshes/coffee_table.obj.bz2"))
+    shape: MeshShape.fromFile(localPath("../../../Scenic/assets/meshes/coffee_table.obj.bz2"))
     width: 1.5
     length: 0.5
     height: 0.4
