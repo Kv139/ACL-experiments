@@ -5,8 +5,10 @@ Metadrive/Scenarios/controllers
 Metadrive/runs
 
 Webots/worlds/*.wbproj
+vacuum/worlds/*.wbproj
 
 *.pyc
 
 
 vacuum/controllers/scenic_supervisor/runs
+
