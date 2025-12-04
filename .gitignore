@@ -7,3 +7,6 @@ Metadrive/runs
 Webots/worlds/*.wbproj
 
 *.pyc
+
+
+vacuum/controllers/scenic_supervisor/runs
