@@ -78,7 +78,7 @@ class CustomWebotsGym(gym.Env):
 
         self.scenic_file = file
 
-        self.info= {'crossovers': 0, 'mutations': 0, 'replays': 0, 'generations': 0}
+        self.info= {'crossovers': 0, 'mutations': 0, 'replays': 0, 'generations': 0, "genetic_failures": 0, "replay_failures": 0}
 
 
     def _make_run_loop(self):
@@ -334,6 +334,10 @@ class CustomWebotsGym(gym.Env):
             print(f"failed id was {id}, scenario was genetic {modified_scenario}")
             # print(f"previous scenes was {self.previous_scenes}")
             # print(f"episode plvs was {self.episode_plvs}")
+            if modified_scenario:
+                self.info["genetic_failures"] += 1
+            else:
+                self.info["replay_failures"] += 1
             """
             Remove broken training scenario or Key from the retained values to prevent reoccurance
             """
