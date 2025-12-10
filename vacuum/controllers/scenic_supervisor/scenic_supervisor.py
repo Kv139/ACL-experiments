@@ -43,7 +43,7 @@ class Args:
     """the entity (team) of wandb's project"""
     capture_video: bool = False
     """whether to capture videos of the agent performances (check out `videos` folder)"""
-    save_model: bool = True
+    save_model: bool = False
     """whether to save model into the `runs/{run_name}` folder"""
     upload_model: bool = False
     """whether to upload the saved model to huggingface"""
@@ -54,19 +54,19 @@ class Args:
     # Scenic specific arguments
     scenic_file: str = "../../scenarios/vacuum_revised.scenic" 
     """the scenic program defining the enviroment"""
-    max_steps: int = 10000
+    max_steps: int = 5000
     """the maximum number of steps for any given episode"""
     model : str = "scenic.simulators.webots.model"
     """ underlying model for the scenic file """
-    sampler_type: str = "halton"
+    sampler_type: str = "random"
     """ sampling type for generating scenes"""
     evaluate_model: bool = False
     """ Choose whether to train or skip to evalutation"""
-    model_to_evaluate_path: str = "./runs/ACL_Webots__scenic_supervisor__1__1764782422/scenic_supervisor.cleanrl_model"
+    model_to_evaluate_path: str = "./final_models/ep10_timesteps_1m_random_genetic.cleanrl_model"
     """Path for model to evaluate"""
     model_name: str = "ep15_timesteps_1m_halton"
     """ model name"""
-    apply_genetic_ops = True
+    apply_genetic_ops = False
     """ flag to signal genetic operations for scene contsruction"""
 
     # Algorithm specific arguments
@@ -96,7 +96,7 @@ class Args:
     """the surrogate clipping coefficient"""
     clip_vloss: bool = True
     """Toggles whether or not to use a clipped loss for the value function, as per the paper."""
-    ent_coef: float = 0.0
+    ent_coef: float = 0.01
     """coefficient of the entropy"""
     vf_coef: float = 0.5
     """coefficient of the value function"""
@@ -130,12 +130,10 @@ def make_env(env_id, idx, capture_video, run_name, gamma):
 
         observation_space = gym.spaces.Dict({
             "velocity": gym.spaces.Box(low=np.array([-1, -1]), high=np.array([1, 1]), shape=(2,),dtype=np.float64),
-            "sensor": gym.spaces.Box(low=np.array([0,0,0,0,0,0,0]), high=np.array([1,1,1,1,1,1,1]),shape=(7,),dtype=np.float64), # defines the range of observations of the agent
             "position": gym.spaces.Box(low=np.array([-1, -1]), high=np.array([1, 1]), shape=(2,),dtype=np.float64),
-            "rotation": gym.spaces.Box(low=np.array([-1,-1,-1,-1]), high=np.array([1,1,1,1]), shape=(4,), dtype=np.float64),
-            "coverage": gym.spaces.Box(low=0, high=1, dtype=np.float64)
+            "lidar": gym.spaces.Box(low=0.0, high=.75, shape=(128,2), dtype=np.float64),
+            "rotation": gym.spaces.Box(low=np.array([-1,-1,-1,-1]), high=np.array([1,1,1,1]), shape=(4,), dtype=np.float64)
         })
-
 
         env = CustomWebotsGym(
             scenario=scenario,
