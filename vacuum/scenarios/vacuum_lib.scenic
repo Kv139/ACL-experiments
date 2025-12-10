@@ -26,8 +26,8 @@ class Vacuum(WebotsObject):
 # Floor uses builtin Webots floor to keep Vacuum Sensors from breaking
 # Not actually linked to WebotsObject because Webots floor is 2D
 class Floor(Object):
-    width: 5
-    length: 5
+    width: 3.5
+    length: 3.5
     height: 0.01
     position: (0,0,-0.005)
     color: [0.785, 0.785, 0.785]
@@ -35,7 +35,7 @@ class Floor(Object):
 
 class Wall(WebotsObject):
     webotsAdhoc: {'physics': False}
-    width: 5
+    width: 3.5
     length: 0.04
     height: 0.5
     color: [0.627, 0.627, 0.627]
@@ -90,4 +90,5 @@ class Toy(WebotsObject):
     color: [1, 0.502, 1]
 
 class BlockToy(Toy):
+    webotsAdhoc: {'physics': False}
     shape: BoxShape()
