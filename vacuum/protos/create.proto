@@ -456,6 +456,7 @@ Robot {
       channel 1
     }
 
+
     DEF CREATE_LED_ON LED {
       translation 0.0202 0.0617 0.0349
       children [
@@ -578,6 +579,19 @@ Robot {
       ]
       type "generic"
     }
+
+    DEF CREATE_LIDAR Lidar {
+      translation 0 0 0.06
+      rotation 0 0 1 0
+      name "LIDAR"
+      fieldOfView  6.27
+      maxRange .5
+      minRange 0.001
+      horizontalResolution 128
+      numberOfLayers       2
+      verticalFieldOfView 0.02
+    }
+    
     DEF CREATE_CLIFF_SENSOR_BACK DistanceSensor {
       translation -0.16 0.0 0.0
       rotation 0.0 0.131 -0.0991 3.14
