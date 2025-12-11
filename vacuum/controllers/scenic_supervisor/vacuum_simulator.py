@@ -150,6 +150,7 @@ class CustomWebotsSimulation(Simulation):
         self.thres = .02
         self.new_space_count = 0
         self.fast_driving_reward = False
+        self.crash_penalty = False
 
         #             "lidar": gym.spaces.Box(low=0.05, high=5.2, shape=(32,3), dtype=np.float64),
 
@@ -353,7 +354,7 @@ class CustomWebotsSimulation(Simulation):
         
     def getObjects(self):
         for obj in self.objects:
-            if "floor" in str(obj).lower() or "vacuum" in str(obj).lower():
+            if "unnamed floor" in str(obj).lower() or "unnamed vacuum" in str(obj).lower():
                 continue
             x, y, z = obj.position
             yaw = obj.heading
@@ -507,7 +508,7 @@ class CustomWebotsSimulation(Simulation):
                     self.coverage_timesteps.append(self.total_steps)
             
             if reward == 0:
-                reward += -.01
+                reward += -.05
 
             return reward
 
@@ -531,8 +532,8 @@ class CustomWebotsSimulation(Simulation):
         reward = self.get_coverage_reward(self.granularity, [pos[0], pos[1]])
         
         if (self.checkCollisions()): # if any distance sensor is low penalize
-            if self.fast_driving_reward: 
-                reward += -.2 # only penalize collisions at a high velocity
+            if self.crash_penalty:
+                reward += -.4 # only penalize collisions at a high velocity
             self.collisions += 1
         else:
             if self.fast_driving_reward:
@@ -588,6 +589,11 @@ class CustomWebotsSimulation(Simulation):
             self.invalid_action = True
             self.actions[0] = 0
             self.actions[1] = 0 # set invalid action to 0 instead
+
+        if np.any(self.actions) > 3:
+            self.crash_penalty = True
+        else:
+            self.crash_penalty = False
 
         if np.all(self.actions) > 10:
             self.fast_driving_reward = True
