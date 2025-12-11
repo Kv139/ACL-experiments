@@ -20,6 +20,7 @@ class Vacuum(WebotsObject):
     Supervisor: True
     controller: "scenic_supervisor"
     resetController: False
+    static: True
     reward : 0
     
 
@@ -32,6 +33,7 @@ class Floor(Object):
     position: (0,0,-0.005)
     color: [0.785, 0.785, 0.785]
     floor: True # for collision checks
+    static: True
 
 class Wall(WebotsObject):
     webotsAdhoc: {'physics': False}
@@ -39,6 +41,7 @@ class Wall(WebotsObject):
     length: 0.04
     height: 0.5
     color: [0.627, 0.627, 0.627]
+    static: True
 
 class DiningTable(WebotsObject):
     webotsAdhoc: {'physics': False}
