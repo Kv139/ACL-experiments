@@ -83,9 +83,9 @@ class CustomWebotsSimulation(Simulation):
     """
     def __init__(self, scene, supervisor, coordinateSystem=ENU, *, timestep, **kwargs):
         #room data
-        self.room_width = 5.    
-        self.room_length = 5.   
-        self.granularity = 0.1    
+        self.room_width = 3.    
+        self.room_length = 3.   
+        self.granularity = 0.1
         self.total_spaces = (2 * np.floor(self.room_width / (2*self.granularity)) + 1)**2 - 4 #-4 for each of the corners
         self.obj_dims = []
         
@@ -125,15 +125,17 @@ class CustomWebotsSimulation(Simulation):
         self.left_motor = self.supervisor.getDevice("right wheel motor")
         self.right_motor = self.supervisor.getDevice("left wheel motor")
 
-        self.sensor_right = self.supervisor.getDevice("cliff_right")
-        self.sensor_front_right = self.supervisor.getDevice("cliff_front_right")
+        # self.sensor_right = self.supervisor.getDevice("cliff_right")
+        # self.sensor_front_right = self.supervisor.getDevice("cliff_front_right")
 
-        self.sensor_left = self.supervisor.getDevice("cliff_left")
-        self.sensor_front_left = self.supervisor.getDevice("cliff_front_left")
+        # self.sensor_left = self.supervisor.getDevice("cliff_left")
+        # self.sensor_front_left = self.supervisor.getDevice("cliff_front_left")
 
-        self.sensor_back = self.supervisor.getDevice("cliff_back")
-        self.sensor_actual_left = self.supervisor.getDevice("actual_left")
-        self.sensor_actual_right = self.supervisor.getDevice("actual_right")
+        # self.sensor_back = self.supervisor.getDevice("cliff_back")
+        # self.sensor_actual_left = self.supervisor.getDevice("actual_left")
+        # self.sensor_actual_right = self.supervisor.getDevice("actual_right")
+
+        self.LIDAR = self.supervisor.getDevice("LIDAR")
 
         self.left_motor.setPosition(float('inf'))
         self.right_motor.setPosition(float('inf'))
@@ -145,13 +147,16 @@ class CustomWebotsSimulation(Simulation):
         self.enable_sensors = False
         self.actions = [0,0]
         self.ms = round(1000 * self.timestep)
-        self.thres = .05
+        self.thres = .02
         self.new_space_count = 0
+        self.fast_driving_reward = False
+
+        #             "lidar": gym.spaces.Box(low=0.05, high=5.2, shape=(32,3), dtype=np.float64),
 
         #observation space
         self.observation = {
             "velocity": np.zeros(2), 
-            "sensor": np.zeros(7),
+            "lidar": np.zeros(shape=(128,2)),
             "position": np.zeros(2),
             "rotation": np.zeros(4),
             "coverage": 0
@@ -329,15 +334,17 @@ class CustomWebotsSimulation(Simulation):
         self.supervisor.step(self.ms)
         self.time_elapsed += self.timestep
         covered_count, coverage_ratio = self.get_coverage_metric()
+
         if coverage_ratio > self.best_coverage[1]:
             self.best_coverage = covered_count, coverage_ratio
-        
+
+        raw_lidar = np.array(self.LIDAR.getRangeImage(), dtype=np.float64)
+    
+        cleaned_lidar = np.nan_to_num(raw_lidar,nan=.75,posinf=.75,neginf=0.00)
+
         self.observation = {
             "velocity": np.array([self.actions[0], self.actions[1]]),
-            "sensor": np.array([self.sensor_left.getValue()/800, self.sensor_right.getValue()/800, 
-                                self.sensor_front_right.getValue()/800, self.sensor_front_left.getValue()/800, 
-                                self.sensor_back.getValue()/800, self.sensor_actual_left.getValue()/800,  
-                                self.sensor_actual_right.getValue()/800]),       
+            "lidar": cleaned_lidar,       
             "position": np.array([self.pos[0]/2.6, self.pos[1]/2.6]),
             "rotation": np.array([rot[0], rot[1], rot[2], rot[3]]),
             "coverage": coverage_ratio
@@ -370,16 +377,19 @@ class CustomWebotsSimulation(Simulation):
         """
         Initialize all the sensors and devices on the robot
         """
-        self.sensor_right.enable(self.ms)
-        self.sensor_front_right.enable(self.ms)
+        # self.sensor_right.enable(self.ms)
+        # self.sensor_front_right.enable(self.ms)
 
-        self.sensor_front_left.enable(self.ms)
-        self.sensor_left.enable(self.ms)
+        # self.sensor_front_left.enable(self.ms)
+        # self.sensor_left.enable(self.ms)
 
-        self.sensor_back.enable(self.ms)
+        # self.sensor_back.enable(self.ms)
 
-        self.sensor_actual_left.enable(self.ms)
-        self.sensor_actual_right.enable(self.ms)
+        # self.sensor_actual_left.enable(self.ms)
+        # self.sensor_actual_right.enable(self.ms)
+
+        self.LIDAR.enable(self.ms)
+        
 
         self.supervisor.step(self.ms) # Need to step the simulation once after initializing the sensors!
         pos = self.granularity * np.round(np.array(self.supervisor_node.getPosition()[:2]) / self.granularity) #need to verify
@@ -495,12 +505,15 @@ class CustomWebotsSimulation(Simulation):
                     reward += .5
                     self.covered_spaces.append(point)
                     self.coverage_timesteps.append(self.total_steps)
+            
+            if reward == 0:
+                reward += -.01
 
             return reward
 
     def checkCollisions(self):
-        minDist = 0.001
-        if np.any(self.observation["sensor"] < minDist):
+        minDist = 0.02
+        if np.any(self.observation["lidar"] < minDist):
                 return True
         for i in range(len(self.prox_checks)):
             if math.dist(self.spheres[i][0], self.records["EgoPosition"][len(self.records["EgoPosition"]) - 1][1]) > .335/2 + self.spheres[i][1] + minDist:
@@ -518,8 +531,18 @@ class CustomWebotsSimulation(Simulation):
         reward = self.get_coverage_reward(self.granularity, [pos[0], pos[1]])
         
         if (self.checkCollisions()): # if any distance sensor is low penalize
-            reward += -.25
+            if self.fast_driving_reward: 
+                reward += -.2 # only penalize collisions at a high velocity
             self.collisions += 1
+        else:
+            if self.fast_driving_reward:
+                reward += .05
+
+
+        # if self.best_coverage[1] > self.thres:
+        #     print("Bonus award achieved")
+        #     reward += self.thres * 100
+        #     self.thres += .02
                
         if self.invalid_action:
             reward += -1
@@ -565,6 +588,11 @@ class CustomWebotsSimulation(Simulation):
             self.invalid_action = True
             self.actions[0] = 0
             self.actions[1] = 0 # set invalid action to 0 instead
+
+        if np.all(self.actions) > 10:
+            self.fast_driving_reward = True
+        else:
+            self.fast_driving_reward = False
     
     def get_truncation(self):
         return False
