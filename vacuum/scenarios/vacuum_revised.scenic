@@ -44,19 +44,5 @@ new Toy on floor, at (VerifaiRange(-1.75, 1.75), VerifaiRange(-1.75, 1.75), 10)
 new Toy on floor, at (VerifaiRange(-1.75, 1.75), VerifaiRange(-1.75, 1.75), 10)
 
 
-# # Create a dining room region where we will place dining room furniture
-# dining_room_region = RectangularRegion(1.25 @ 0, 0, 5, 5).difference(safe_zone)
-
-# dining_table = new DiningTable on floor, at (VerifaiRange(-2.5, 2.5) @ VerifaiRange(-2.5, 2.5)), with size .1
-# ideal_pos = new OrientedPoint behind dining_table by -0.1, facing toward dining_table
-# chair_1 = new DiningChair on floor, 
-#                 facing VerifaiRange((-dnev*10) deg, (dnev*10) deg) relative to ideal_pos,
-#                 at ideal_pos offset by (VerifaiRange(-dnev*.05, dnev*.05) @ VerifaiRange(-dnev*.05, dnev*.05)),
-#                 with regionContainedIn dining_room_region     
-# ideal_pos = new OrientedPoint left of dining_table by -0.1, facing toward dining_table
-# chair_3 = new DiningChair on floor, 
-#                 facing VerifaiRange((-dnev*10) deg, (dnev*10) deg) relative to ideal_pos,
-#                 at ideal_pos offset by (VerifaiRange(-dnev*.05, dnev*.05) @ VerifaiRange(-dnev*.05, dnev*.05)), 
-#                 with regionContainedIn dining_room_region
 
 
