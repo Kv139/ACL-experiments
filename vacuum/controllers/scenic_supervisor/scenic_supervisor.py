@@ -43,7 +43,7 @@ class Args:
     """the entity (team) of wandb's project"""
     capture_video: bool = False
     """whether to capture videos of the agent performances (check out `videos` folder)"""
-    save_model: bool = False
+    save_model: bool = True
     """whether to save model into the `runs/{run_name}` folder"""
     upload_model: bool = False
     """whether to upload the saved model to huggingface"""
@@ -64,7 +64,7 @@ class Args:
     """ Choose whether to train or skip to evalutation"""
     model_to_evaluate_path: str = "./final_models/ep10_timesteps_1m_random_genetic.cleanrl_model"
     """Path for model to evaluate"""
-    model_name: str = "ep15_timesteps_1m_halton"
+    model_name: str = "ep5_timesteps_1m_random"
     """ model name"""
     apply_genetic_ops = False
     """ flag to signal genetic operations for scene contsruction"""
