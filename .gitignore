@@ -9,6 +9,7 @@ vacuum/worlds/*.wbproj
 
 *.pyc
 
+vacuum/controllers/scenic_supervisor/final_models/*
 
 vacuum/controllers/scenic_supervisor/runs
 
