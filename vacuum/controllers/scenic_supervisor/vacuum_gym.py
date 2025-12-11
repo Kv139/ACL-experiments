@@ -72,9 +72,12 @@ class CustomWebotsGym(gym.Env):
         self.gae_lambda = 0.95
         self.gamma      = 0.99
         self.pvl_threshold = 0
+        self.replay = False
+        self.replay_id = -1
 
         self.episode_rewards = []
         self.episode_values  = []
+
 
         self.scenic_file = file
 
@@ -90,6 +93,8 @@ class CustomWebotsGym(gym.Env):
                     scene, _ = self.scenario.generate(feedback=self.feedback_result)
                 with self.simulator.simulateStepped(scene, maxSteps=self.max_steps) as simulation:
                     steps_taken = 0
+                    self.episode_counter += 1
+                    print(f'{self.episode_counter}')
                     # this first block before the while loop is for the first reset call
                     done = lambda: not (simulation.result is None) 
                     truncated = lambda: (steps_taken >= self.max_steps) or simulation.get_truncation()  # TODO handle cases where it is done right on maxsteps
@@ -113,10 +118,9 @@ class CustomWebotsGym(gym.Env):
                             # simulation.destroy() # FIXME...might redundant?
                             actions = yield observation, reward, done(), truncated(), info
                             break # a little unclean right here
-
                         actions = yield observation, reward, done(), truncated(), info
                         simulation.actions = actions # TODO add action dict to simulation interfaces
-                        
+                    
             except ResetException:
                 continue
 
@@ -124,7 +128,6 @@ class CustomWebotsGym(gym.Env):
         # only setting enviornment seed, not torch seed?
         if self.episode_counter > 0:
             self.compute_episode_pvl()
-        self.episode_counter += 1
         super().reset(seed=seed)
         self.rewards = []
         self.values  = []
@@ -184,16 +187,18 @@ class CustomWebotsGym(gym.Env):
             
             pvl = np.sum(advantages)/len(advantages)
             if not self.genetic_flag:
-                # Comput Sampler feedbach such that values < .15 are > 0, SO sampler tries to find scenes with value > .15
+                # Compute Sampler feedbach such that values < .1 are > 0, SO sampler tries to find scenes with value > .15
                 result = -np.tanh(pvl) + 0.1
                 self.feedback_result = result
-                print(f"feedback result was {self.feedback_result} with raw pvl of {pvl}")
+               # print(f"feedback result was {self.feedback_result} with raw pvl of {pvl}")
                 return 
 
-            if pvl > self.pvl_threshold or len(list(self.episode_plvs.items())) < 10:
-                self.episode_plvs[self.episode_counter] = np.sum(advantages)/len(advantages)
+            if pvl > self.pvl_threshold or len(list(self.episode_plvs.items())) < 10 and not self.replay:
+                self.episode_plvs[self.episode_counter-1] = np.sum(advantages)/len(advantages)
+            elif self.replay:
+                self.episode_plvs[self.replay_id] = np.sum(advantages)/len(advantages)
         else:
-            self.episode_plvs[self.episode_counter] = 0
+            self.episode_plvs[self.episode_counter-1] = 0
     
     def get_scene(self):
         """
@@ -204,6 +209,7 @@ class CustomWebotsGym(gym.Env):
         
         TODO : Add a weighted probability calculation for previously seen scenes
         """
+        self.replay = False
         if self.episode_counter % 10 == 0:
             print(f"Counts: {self.info}")
 
@@ -214,46 +220,50 @@ class CustomWebotsGym(gym.Env):
             self.info['generations'] += 1
 
   
-        elif self.episode_counter >= 5 and self.episode_counter % 2 == 0: # TODO adjust timing conditions 50/50 exploitation vrs. exploration
-            idx1 = random.choice(self.best_scene_ids) #TODO fix size
-            choice = random.random()
-            if choice < .5: #TODO fix logic -- debugging
-                idx2 = random.choice(self.best_scene_ids) #TODO fix size
-                if idx1 == idx2:
-                    scene = self.read_scene_bytes(idx1)
-                    return scene
-                else:
-                    scene1 = self.read_scene_bytes(idx1)
-                    scene2 = self.read_scene_bytes(idx2)
-                    scene = self.crossover_scences(scene1=scene1, scene2=scene2)
-            else:
+        elif self.episode_counter >= 25 and self.episode_counter % 2 == 0: # TODO adjust timing conditions 50/50 exploitation vrs. exploration
+            idx1,idx2 = random.sample(self.best_scene_ids,2) #TODO fix size
+            choice = random.choice([1,2,3])
+            if choice == 1:
+                scene1 = self.read_scene_bytes(idx1)
+                scene2 = self.read_scene_bytes(idx2)
+                scene = self.crossover_scences(scene1=scene1, scene2=scene2)
+            elif choice == 2:
                 scene = self.mutate_scene(self.read_scene_bytes(idx1))
-
-        else:
-            choice = random.random()
-            if choice < .5:
+                
+            else:
+                self.replay = True
                 curr_scene_id = random.choice(self.best_scene_ids)
                 scene = self.read_scene_bytes(curr_scene_id)
                 self.info['replays'] += 1
-            else:
-                scene = self.generate_scene()
-                self.info['generations'] += 1
+                self.replay_id = curr_scene_id 
+
+        else:
+            scene = self.generate_scene()
+            self.info['generations'] += 1
 
         # print(f"checking logs: {self.episode_plvs}")
+
         return scene
 
 
     def crossover_scences(self, scene1, scene2):
         """
         Generate a new program with traits from two differnt programs 
+
+        for obj in self.objects:
+            if "floor" in str(obj).lower() or "vacuum" in str(obj).lower():
+                continue
         """
+       
         self.info['crossovers'] +=1
         
         obj_sc1 = []
         obj_sc2 = []
         assert len(scene1.objects) == len(scene2.objects)
 
-        ch1 = random.choice(range(len(scene1.objects)))
+        options = [idx for idx in range(len(scene1.objects)) if not hasattr(scene1.objects[idx], "static")]
+        ch1 = random.choice(options)
+        options.remove(ch1)
 
         options = [idx for idx in range(len(scene1.objects)) if idx != ch1]
         ch2 = random.choice(options)
@@ -277,8 +287,9 @@ class CustomWebotsGym(gym.Env):
             If no valid sample is found returns the original program
         """ 
         self.info['mutations'] += 1
+        options = [idx for idx in range(len(scene.objects)) if not hasattr(scene.objects[idx], "static")]
 
-        object = random.choice(range(len(scene.objects)))
+        object = random.choice(options)
         objects = [object]
        
         new_scene = self.generate_scene(objects=objects,scene=scene)
@@ -291,7 +302,7 @@ class CustomWebotsGym(gym.Env):
         """
         if self.episode_counter >= 5:
             sorted_pairs = sorted(self.episode_plvs.items(), key=lambda item: item[1], reverse=True)
-            total_pairs = min(100, len(sorted_pairs))
+            total_pairs = min(20, len(sorted_pairs))
             self.best_scene_ids = [idx_value_pairs[0] for idx_value_pairs in sorted_pairs[:total_pairs]] #TODO fix this for modified buffer size
             self.pvl_threshold = np.mean([pair[1] for pair in sorted_pairs[:total_pairs]])
 
@@ -313,12 +324,12 @@ class CustomWebotsGym(gym.Env):
                                     params=params)
             except InvalidScenarioError:
                 scenario = self.scenario
+                self.replay = False
 
         elif id in self.previous_scenarios:
             modified_scenario = True
             params = {}
             scenario = self.previous_scenarios[id]
-
         else:
             params = {}
             scenario =  self.scenario
@@ -329,9 +340,8 @@ class CustomWebotsGym(gym.Env):
             bytes = self.previous_scenes[id]
             return scenario.sceneFromBytes(bytes)
         
-        except (SerializationError, KeyError, RejectionException):
-            print(f"SerializationError, KeyError, or RejectionException: occured returning new Scene")
-            print(f"failed id was {id}, scenario was genetic {modified_scenario}")
+        except (SerializationError, KeyError, RejectionException) as e:
+            print(f"failed id was {id}, scenario was genetic {modified_scenario} error type was {e}")
             if modified_scenario:
                 self.info["genetic_failures"] += 1
             else:
@@ -346,6 +356,7 @@ class CustomWebotsGym(gym.Env):
                 del self.previous_scenes_params[id]
            
             scene, _ = self.scenario.generate()
+            self.replay = False
             return scene
 
 
