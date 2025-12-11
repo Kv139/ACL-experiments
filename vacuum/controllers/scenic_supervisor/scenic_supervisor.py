@@ -62,11 +62,11 @@ class Args:
     """ sampling type for generating scenes"""
     evaluate_model: bool = False
     """ Choose whether to train or skip to evalutation"""
-    model_to_evaluate_path: str = "./final_models/ep10_timesteps_1m_random_genetic.cleanrl_model"
+    model_to_evaluate_path: str = "./final_models/ep5_timesteps_1m_random.cleanrl_model"
     """Path for model to evaluate"""
     model_name: str = "ep5_timesteps_1m_random"
     """ model name"""
-    apply_genetic_ops = False
+    apply_genetic_ops = True
     """ flag to signal genetic operations for scene contsruction"""
 
     # Algorithm specific arguments
@@ -391,6 +391,9 @@ if __name__ == "__main__":
         
         assert args.sampler_type == "random", "You forgot to use random sampling try again"
     
+        import random
+        random.seed(52)
+
         print("evaluating model")
         episodic_returns = evaluate(
             envs,
