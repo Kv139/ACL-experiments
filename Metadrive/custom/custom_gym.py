@@ -3,12 +3,10 @@ from scenic.core.scenarios import Scenario
 import gymnasium as gym
 from gymnasium import spaces
 from typing import Callable
-from metadrive.envs import MetaDriveEnv
-
 
 from scenic.core.simulators import Simulator, Simulation
 from scenic.core.scenarios import Scenario, Scene
-from scenic.core.distributions import RejectionException 
+from scenic.core.distributions import RejectionException, RandomControlFlowError
 from scenic.core.serialization import SerializationError
 import gymnasium as gym
 from gymnasium import spaces
@@ -30,7 +28,7 @@ class ResetException(Exception):
 
 class CustomMetaDriveEnv(gym.Env):
     """
-    verifai_sampler now not an argument added in here, but one specified in the Scenic program
+    verifai_sampler now not an argument added in here, but one specified int he Scenic program
     """
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 4} # TODO placeholder, add simulator-specific entries
     
@@ -44,7 +42,7 @@ class CustomMetaDriveEnv(gym.Env):
                  action_space : spaces.Dict = spaces.Dict(),
                  record_scenic_sim_results : bool = True,
                  feedback_fn : callable = lambda x: x,
-                 genetic_flag : bool = True): # empty string means just pure scenic???
+                 genetic_flag : bool = False): # empty string means just pure scenic???
 
         assert render_mode is None or render_mode in self.metadata["render_modes"]
 
@@ -66,25 +64,37 @@ class CustomMetaDriveEnv(gym.Env):
         self.episode_counter = 0 # id to map instances
         self.episode_plvs = {}
         self.previous_scenes = {}
+        self.previous_scenarios = {}
         self.previous_scenes_params = {}
+        self.mutable_scenario = None
 
 
         self.gae_lambda = 0.95
         self.gamma      = 0.99
         self.pvl_threshold = 0
+        self.replay = False
+        self.replay_id = -1
 
         self.episode_rewards = []
         self.episode_values  = []
 
+
         self.scenic_file = file
+
+        self.info= {'crossovers': 0, 'mutations': 0, 'replays': 0, 'generations': 0, "genetic_failures": 0, "replay_failures": 0}
 
 
     def _make_run_loop(self):
         while True:
             try:
-                scene = self.get_scene()
+                if self.genetic_flag:
+                    scene = self.get_scene()
+                else:
+                    scene, _ = self.scenario.generate(feedback=self.feedback_result)
                 with self.simulator.simulateStepped(scene, maxSteps=self.max_steps) as simulation:
                     steps_taken = 0
+                    self.episode_counter += 1
+                    print(f'{self.episode_counter}')
                     # this first block before the while loop is for the first reset call
                     done = lambda: not (simulation.result is None) 
                     truncated = lambda: (steps_taken >= self.max_steps) or simulation.get_truncation()  # TODO handle cases where it is done right on maxsteps
@@ -108,10 +118,9 @@ class CustomMetaDriveEnv(gym.Env):
                             # simulation.destroy() # FIXME...might redundant?
                             actions = yield observation, reward, done(), truncated(), info
                             break # a little unclean right here
-
                         actions = yield observation, reward, done(), truncated(), info
                         simulation.actions = actions # TODO add action dict to simulation interfaces
-                        
+                    
             except ResetException:
                 continue
 
@@ -162,24 +171,34 @@ class CustomMetaDriveEnv(gym.Env):
         
         :Compute the average postive value loss per episode 
         """
-        lastgaelam = 0 
-        advantages = [0] * len(self.episode_rewards) # hold the  
-        for t in reversed(range(len(self.episode_rewards))):
-            if t == len(self.episode_rewards) - 1:
-                next_v = 0
-                nextnonterminal = 0
-            else:
-                next_v = self.episode_values[t+1]
-                nextnonterminal = 1
-            delta = self.episode_rewards[t] + self.gamma * next_v * nextnonterminal - self.episode_values[t]
-            advantages[t] = lastgaelam = delta[0] + self.gamma * self.gae_lambda * nextnonterminal * lastgaelam
-            advantages[t] = max(advantages[t],0)        
+        if len(self.episode_rewards)>= 1 and len(self.episode_values) >= 1:
+            lastgaelam = 0 
+            advantages = [0] * len(self.episode_rewards) # hold the  
+            for t in reversed(range(len(self.episode_rewards))):
+                if t == len(self.episode_rewards) - 1:
+                    next_v = 0
+                    nextnonterminal = 0
+                else:
+                    next_v = self.episode_values[t+1]
+                    nextnonterminal = 1
+                delta = self.episode_rewards[t] + self.gamma * next_v * nextnonterminal - self.episode_values[t]
+                advantages[t] = lastgaelam = delta[0] + self.gamma * self.gae_lambda * nextnonterminal * lastgaelam
+                advantages[t] = max(advantages[t],0)        
+            
+            pvl = np.sum(advantages)/len(advantages)
+            if not self.genetic_flag:
+                # Compute Sampler feedbach such that values < .1 are > 0, SO sampler tries to find scenes with value > .15
+                result = -np.tanh(pvl) + 0.1
+                self.feedback_result = result
+               # print(f"feedback result was {self.feedback_result} with raw pvl of {pvl}")
+                return 
 
-        pvl = np.sum(advantages)/len(advantages)
-
-        if pvl > self.pvl_threshold or self.curr_scene_id < 10:
-            self.episode_plvs[self.curr_scene_id] = np.sum(advantages)/len(advantages)
-            self.curr_scene_id += 1
+            if pvl > self.pvl_threshold or len(list(self.episode_plvs.items())) < 10 and not self.replay:
+                self.episode_plvs[self.episode_counter-1] = np.sum(advantages)/len(advantages)
+            elif self.replay:
+                self.episode_plvs[self.replay_id] = np.sum(advantages)/len(advantages)
+        else:
+            self.episode_plvs[self.episode_counter-1] = 0
     
     def get_scene(self):
         """
@@ -190,39 +209,40 @@ class CustomMetaDriveEnv(gym.Env):
         
         TODO : Add a weighted probability calculation for previously seen scenes
         """
+        self.replay = False
+        if self.episode_counter % 10 == 0:
+            print(f"Counts: {self.info}")
+
         self.select_best_scenes()
       
         if self.episode_counter < 5:
-            self.curr_scene_id = self.episode_counter
             scene = self.generate_scene()
+            self.info['generations'] += 1
+
   
-        elif self.episode_counter >= 5 and self.episode_counter % 2 == 0: # TODO adjust timing conditions 50/50 exploitation vrs. exploration
-            idx1 = random.choice(self.best_scene_ids) #TODO fix size
-            choice = random.random()
-            if choice < .5: #TODO fix logic -- debugging
-                idx2 = random.choice(self.best_scene_ids) #TODO fix size
-                if idx1 == idx2:
-                    scene = self.read_scene_bytes(idx1)
-                    return scene
-                else:
-                    scene1 = self.read_scene_bytes(idx1)
-                    scene2 = self.read_scene_bytes(idx2)
-                    scene = self.crossover_scences(scene1=scene1, scene2=scene2)
-            else:
+        elif self.episode_counter >= 25 and self.episode_counter % 2 == 0: # TODO adjust timing conditions 50/50 exploitation vrs. exploration
+            idx1,idx2 = random.sample(self.best_scene_ids,2) #TODO fix size
+            choice = random.choice([1,2,3])
+            if choice == 1:
+                scene1 = self.read_scene_bytes(idx1)
+                scene2 = self.read_scene_bytes(idx2)
+                scene = self.crossover_scences(scene1=scene1, scene2=scene2)
+            elif choice == 2:
                 scene = self.mutate_scene(self.read_scene_bytes(idx1))
+                
+            else:
+                self.replay = True
+                curr_scene_id = random.choice(self.best_scene_ids)
+                scene = self.read_scene_bytes(curr_scene_id)
+                self.info['replays'] += 1
+                self.replay_id = curr_scene_id 
 
         else:
-            choice = random.random()
-            if choice < .5:
-                idx = random.choice(self.best_scene_ids)
-                self.curr_scene_id = idx
-                scene = self.read_scene_bytes(idx)
-            else:
-                scene = self.generate_scene()
-                
+            scene = self.generate_scene()
+            self.info['generations'] += 1
 
-        self.episode_counter += 1
         # print(f"checking logs: {self.episode_plvs}")
+
         return scene
 
 
@@ -231,14 +251,13 @@ class CustomMetaDriveEnv(gym.Env):
         Generate a new program with traits from two differnt programs 
         """
         # This bit is probably unnesecary but I will leave it like this for now
-        unmutable_params = ["map", "carla_map", "time_step", "verifaiSamplerType", "render", "use2DMap"]
-        mutable_params = [key for key in scene1.params.keys() if key not in unmutable_params]
-        
-        params = scene1.params
-        for key in mutable_params:
-            choice = random.random()
-            if choice < .5:
-                params[key] = scene2.params[key]        
+        mutable_params = [["select_road", "distractor_road"], ["select_lane", "distractor_lane"]]
+
+        choice = random.randint(0,1)
+        params = {}
+
+        params[mutable_params[choice][0]] = scene1.params[mutable_params[choice][0]] 
+        params[mutable_params[choice][1]] = scene2.params[mutable_params[choice][1]]     
 
         new_scene = self.generate_scene(params=params)
 
@@ -253,18 +272,14 @@ class CustomMetaDriveEnv(gym.Env):
             then condidtions the distribution to them and resamples
             If no valid sample is found returns the original program
         """ 
-        mutable_params = ["select_road","extra_cars" ] 
+        mutable_params = ["select_road", "distractor_road", 'select_lane', 'distractor_lane' ] 
         conditioned_params = {}
-        idx = random.randint(0,len(mutable_params)-1)
-
-        if idx == 2:
-            new_val = random.randint(0,6)
-            conditioned_params[mutable_params[idx]] = new_val
-        else:
-            conditioned_params[mutable_params[idx]] = scene.params[mutable_params[idx]]
+        choice = random.choice(mutable_params)
+        conditioned_params[choice] = scene.params[choice]
        
         new_scene = self.generate_scene(params=conditioned_params)
         return new_scene
+
 
 
     def select_best_scenes(self):
@@ -273,7 +288,7 @@ class CustomMetaDriveEnv(gym.Env):
         """
         if self.episode_counter >= 5:
             sorted_pairs = sorted(self.episode_plvs.items(), key=lambda item: item[1], reverse=True)
-            total_pairs = min(100, len(sorted_pairs))
+            total_pairs = min(20, len(sorted_pairs))
             self.best_scene_ids = [idx_value_pairs[0] for idx_value_pairs in sorted_pairs[:total_pairs]] #TODO fix this for modified buffer size
             self.pvl_threshold = np.mean([pair[1] for pair in sorted_pairs[:total_pairs]])
 
@@ -284,12 +299,23 @@ class CustomMetaDriveEnv(gym.Env):
         :param scene_bytes: Scenic program written to bytes
         returns: Scene
         """
+        modified_scenario = False
         if id in self.previous_scenes_params:
             params = self.previous_scenes_params[id]
-            scenario = scenic.scenarioFromFile(self.scenic_file,
-                                model="scenic.simulators.metadrive.model",
-                                mode2D=True,
-                                params=params)
+            # TODO I make this same call multiple times -- consider creating a seperate function
+            try: # arbritrary mutations may not be valid -- ensure that the constructed scenario is
+                scenario = scenic.scenarioFromFile(self.scenic_file,
+                                    model="scenic.simulators.webots.model",
+                                    mode2D=False,
+                                    params=params)
+            except InvalidScenarioError:
+                scenario = self.scenario
+                self.replay = False
+
+        elif id in self.previous_scenarios:
+            modified_scenario = True
+            params = {}
+            scenario = self.previous_scenarios[id]
         else:
             params = {}
             scenario =  self.scenario
@@ -300,11 +326,12 @@ class CustomMetaDriveEnv(gym.Env):
             bytes = self.previous_scenes[id]
             return scenario.sceneFromBytes(bytes)
         
-        except (SerializationError, KeyError):
-            print(f"SerializationError or KeyError occured returning new Scene")
-            print(f"failed id was {id}")
-            print(f"previous scenes was {self.previous_scenes}")
-            print(f"episode plvs was {self.episode_plvs}")
+        except (SerializationError, KeyError, RejectionException) as e:
+            print(f"failed id was {id}, scenario was genetic {modified_scenario} error type was {e}")
+            if modified_scenario:
+                self.info["genetic_failures"] += 1
+            else:
+                self.info["replay_failures"] += 1
             """
             Remove broken training scenario or Key from the retained values to prevent reoccurance
             """
@@ -315,24 +342,47 @@ class CustomMetaDriveEnv(gym.Env):
                 del self.previous_scenes_params[id]
            
             scene, _ = self.scenario.generate()
+            self.replay = False
             return scene
 
 
-    def generate_scene(self,params={}):
+    def generate_scene(self,params={},objects=None,scene=None):
         """
         Generate a new Scenario 
             (1): If no params are passed generates a new scene from the original program
             (2): If custom params are passed compiles a new program with these values and 
                  saves those params so the program can be reconstructed later
         """
-        if params is not {}:
-            try:
-                scenario = scenic.scenarioFromFile(self.scenic_file, model="scenic.simulators.metadrive.model",mode2D=True,params=params)
+        if objects:
+            assert scene is not None
+ 
+            try: 
+                scenario = scenic.scenarioFromFile(self.scenic_file, model="scenic.simulators.webots.model",mode2D=False,params={})
             except InvalidScenarioError:
-                print('Invalid Scearnio instance returning original program')
                 scenario = self.scenario
 
-            self.previous_scenes_params[self.curr_scene_id] = params
+            try:
+                scenario.conditionOn(scene=scene,objects=objects)
+                new_scene, _ = scenario.generate()
+                self.previous_scenarios[self.episode_counter] = scenario
+
+            except (RejectionException,RandomControlFlowError):
+                print(f"Control flow error with objects {objects}")
+                for i in range(len(scene.objects)):
+                    if i in objects:
+                        print(scene.objects[i])
+
+                scenario = self.scenario
+                new_scene, _ = scenario.generate()
+
+        elif params != {} and objects is None:
+            try: 
+                scenario = scenic.scenarioFromFile(self.scenic_file, model="scenic.simulators.webots.model",mode2D=False,params=params)
+            except InvalidScenarioError:
+                print('Invalid Scenario instance returning original program')
+                scenario = self.scenario
+
+            self.previous_scenes_params[self.episode_counter] = params
             try: 
                 new_scene, _ = scenario.generate()
             
@@ -345,7 +395,9 @@ class CustomMetaDriveEnv(gym.Env):
             new_scene, _ =  scenario.generate()
         
         bytes = scenario.sceneToBytes(new_scene)
-        self.previous_scenes[self.curr_scene_id] = bytes
+        self.previous_scenes[self.episode_counter] = bytes
 
         return new_scene
+    
+
 

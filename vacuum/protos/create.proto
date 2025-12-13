@@ -1,4 +1,4 @@
-#VRML_SIM R2023a utf8
+#VRML_SIM R2025a utf8
 # license: Copyright Cyberbotics Ltd. Licensed for use only with Webots.
 # license url: https://cyberbotics.com/webots_assets_license
 # documentation url: https://www.cyberbotics.com/doc/guide/create
@@ -587,7 +587,7 @@ Robot {
       fieldOfView  6.27
       maxRange .5
       minRange 0.001
-      horizontalResolution 128
+      horizontalResolution 64
       numberOfLayers       2
       verticalFieldOfView 0.02
     }

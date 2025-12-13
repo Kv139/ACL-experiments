@@ -6,7 +6,7 @@ import scenic
 from dataclasses import dataclass
 
 #TODO build out customr envs/simulators
-from vacuum_simulator import CustomrWebotsSimulator
+from vacuum_simulator import CustomWebotsSimulator
 from vacuum_gym import CustomWebotsGym
 from controller import Supervisor
 
@@ -43,8 +43,7 @@ class Args:
     """the entity (team) of wandb's project"""
     capture_video: bool = False
     """whether to capture videos of the agent performances (check out `videos` folder)"""
-    save_model: bool = True
-    """whether to save model into the `runs/{run_name}` folder"""
+
     upload_model: bool = False
     """whether to upload the saved model to huggingface"""
     hf_entity: str = ""
@@ -54,12 +53,14 @@ class Args:
     # Scenic specific arguments
     scenic_file: str = "../../scenarios/vacuum_revised.scenic" 
     """the scenic program defining the enviroment"""
-    max_steps: int = 5000
+    max_steps: int =  2500
     """the maximum number of steps for any given episode"""
     model : str = "scenic.simulators.webots.model"
     """ underlying model for the scenic file """
-    sampler_type: str = "random"
+    sampler_type: str = "Halton"
     """ sampling type for generating scenes"""
+    save_model: bool = True
+    """whether to save model into the `runs/{run_name}` folder"""
     evaluate_model: bool = False
     """ Choose whether to train or skip to evalutation"""
     model_to_evaluate_path: str = "./final_models/ep5_timesteps_1m_random.cleanrl_model"
@@ -131,13 +132,14 @@ def make_env(env_id, idx, capture_video, run_name, gamma):
         observation_space = gym.spaces.Dict({
             "velocity": gym.spaces.Box(low=np.array([-1, -1]), high=np.array([1, 1]), shape=(2,),dtype=np.float64),
             "position": gym.spaces.Box(low=np.array([-1, -1]), high=np.array([1, 1]), shape=(2,),dtype=np.float64),
-            "lidar": gym.spaces.Box(low=0.0, high=.75, shape=(128,2), dtype=np.float64),
-            "rotation": gym.spaces.Box(low=np.array([-1,-1,-1,-1]), high=np.array([1,1,1,1]), shape=(4,), dtype=np.float64)
+            "lidar"   : gym.spaces.Box(low=np.zeros(128), high=np.full(shape=(128,), fill_value=.5)),
+            "rotation": gym.spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float64),
+            "coverage": gym.spaces.Box(low=0, high=1, shape=(1,), dtype=np.float64)
         })
 
         env = CustomWebotsGym(
             scenario=scenario,
-            simulator=CustomrWebotsSimulator(supervisor=supervisor),
+            simulator=CustomWebotsSimulator(supervisor=supervisor),
             max_steps=args.max_steps,
             observation_space=observation_space,
             action_space=action_space,
@@ -274,9 +276,12 @@ if __name__ == "__main__":
 
                 # TRY NOT TO MODIFY: execute the game and log data.
                 next_obs, reward, terminations, truncations, infos = envs.step(action.cpu().numpy())
+    
                 next_done = np.logical_or(terminations, truncations)
                 rewards[step] = torch.tensor(reward).to(device).view(-1)
                 next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(next_done).to(device)
+
+
 
                 envs.call("log_episode_stats", rewards[step],values[step])
 

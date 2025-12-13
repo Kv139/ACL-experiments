@@ -31,11 +31,11 @@ def get_nearest_centerline(obj):
 # TODO fix params -- need more variabiltiy and ensure that modified scenes make!
 
 
-param select_road = Uniform(*network.roads)
-param distractor_road = Uniform(*network.roads)
+param select_road = VerifaiOptions([*network.roads])
+param distractor_road = VerifaiOptions([*network.roads])
 
-param select_lane = Uniform(*network.lanegoups)
-param distractor_lane = Uniform(*network.lanes)
+param select_lane = VerifaiOptions([*network.lanes])
+param distractor_lane = VerifaiOptions([*network.lanes])
 
 start = Uniform(*globalParameters.select_lane.centerline.points)
 start2 = Uniform(*globalParameters.distractor_lane.centerline.points)
@@ -45,12 +45,6 @@ start2 = (start2[0] @ start2[1])
 
 ego = new Car on start, facing roadDirection, with observation 0, with cte 0 
 distractor = new Car on start2, with behavior DriveAvoidingCollisions(target_speed=10, avoidance_threshold=12)
-
-# ego.previous_coordinates = [0,0]
-
-# for id in range(globalParameters.extra_cars):
-# 	new Car with behavior DriveAvoidingCollisions()
-
 
 monitor DrivingReward(obj):
 	while True:

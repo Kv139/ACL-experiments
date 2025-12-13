@@ -41,7 +41,7 @@ import scenic.simulators.metadrive.utils as utils
 class CustomMetaDriveSimulator(DrivingSimulator):
     """Implementation of `Simulator` for MetaDrive."""
 
-    def __init__(self,timestep=0.1,render=True,render3D=False,sumo_map=None,real_time=True,max_steps=1000):
+    def __init__(self,timestep=0.1,render=False,render3D=False,sumo_map=None,real_time=True,max_steps=1000):
         super().__init__()
         self.render = render
         self.render3D = render3D if render else False
@@ -114,7 +114,7 @@ class CustomMetaDriveSimulation(DrivingSimulation):
         self.sumo_map_boundary = sumo_map_boundary
         self.film_size = film_size
         self.actions = [0,0]
-        self.observation = np.zeros(shape=(84,64,3))
+        self.observation = {"semantic_camera": np.zeros(shape=(84,64,3)), "actions": np.zeros(shape=(2,))}
         self.early_terminate = False
         self.max_steps = max_steps
         self.steps_taken = 0
@@ -324,7 +324,8 @@ class CustomMetaDriveSimulation(DrivingSimulation):
 
         sem_camera =  self.client.engine.get_sensor("semantic_camera")
 
-        obs = np.array(sem_camera.perceive())
+
+        obs = {"semantic_camera":np.array(sem_camera.perceive()), "actions": self.actions}
 
         # print(f'Checking roadDeviation for ego: {self.scene.objects[0].roadDeviation}')
 
@@ -368,6 +369,7 @@ class CustomMetaDriveSimulation(DrivingSimulation):
             return 5 # finish the episode without leaving the road
         else:
             reward= self.scene.objects[0].reward
+
         self.rewards.append(reward)
         return reward
     

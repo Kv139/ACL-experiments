@@ -27,7 +27,7 @@ class Args:
     """seed of the experiment"""
     torch_deterministic: bool = True
     """if toggled, `torch.backends.cudnn.deterministic=False`"""
-    cuda: bool = False
+    cuda: bool = True
     """if toggled, cuda will be enabled by default"""
     track: bool = False
     """if toggled, this experiment will be tracked with Weights and Biases"""
@@ -37,8 +37,6 @@ class Args:
     """the entity (team) of wandb's project"""
     capture_video: bool = False
     """whether to capture videos of the agent performances (check out `videos` folder)"""
-    save_model: bool = False
-    """whether to save model into the `runs/{run_name}` folder"""
     upload_model: bool = False
     """whether to upload the saved model to huggingface"""
     hf_entity: str = ""
@@ -48,7 +46,7 @@ class Args:
     # Scenic specific arguments
     scenic_file: str = "./scenarios/driver.scenic" 
     """the scenic program defining the enviroment"""
-    max_steps: int = 5000
+    max_steps: int = 100
     """the maximum number of steps for any given episode"""
     model : str = "scenic.simulators.metadrive.model"
     """ underlying model for the scenic file """
@@ -56,11 +54,23 @@ class Args:
     """ Sumo map for the env"""
     sampler_type: str = "halton"
     """ sampling type for generating scenes"""
+    save_model: bool = True
+    """whether ot save modle into the """
+    save_model: bool = True
+    """whether to save model into the `runs/{run_name}` folder"""
+    evaluate_model: bool = False
+    """ Choose whether to train or skip to evalutation"""
+    model_to_evaluate_path: str = "./final_models/ep5_timesteps_1m_random.cleanrl_model"
+    """Path for model to evaluate"""
+    model_name: str = "ep5_timesteps_1m_random_ng"
+    """ model name"""
+    apply_genetic_ops = True
+    """ flag to signal genetic operations for scene contsruction"""
 
     # Algorithm specific arguments
     env_id: str = "ACL_MetaDrive"
     """the id of the environment"""
-    total_timesteps: int = 1000000
+    total_timesteps: int = 500000
     """total timesteps of the experiments"""
     learning_rate: float = 3e-4
     """the learning rate of the optimizer"""
@@ -111,7 +121,8 @@ def make_env(env_id, idx, capture_video, run_name, gamma):
                                         params={"verifaiSamplerType": args.sampler_type}))
         #shape was [100 200   3]
         # OBS needs to be updated
-        observation_space = gym.spaces.Box(low=0, high=1, shape=(84,64,3), dtype=np.float32)  # Defines the possible actions of the agent
+        observation_space = gym.spaces.Dict({"semantic_camera": gym.spaces.Box(low=0, high=1, shape=(84,64,3), dtype=np.float32),
+                                            "actions":gym.spaces.Box(low=np.array([-1,-1]), high=np.array([1,1]), shape=(2,), dtype=np.float32)})  # Defines the possible actions of the agent
         
         action_space = gym.spaces.Box(low=np.array([-1,-1]), high=np.array([1,1]), shape=(2,), dtype=np.float32)  # Defines the possible actions of the agent
 
