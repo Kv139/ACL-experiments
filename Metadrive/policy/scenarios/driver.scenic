@@ -1,11 +1,10 @@
-param map = localPath('../CARLA/Town01.xodr')
+param map = localPath('../../CARLA/Town01.xodr')
 param carla_map = 'Town01'
 
 model scenic.simulators.metadrive.model
 
 param time_step = 1.0/10
 param verifaiSamplerType = 'halton'
-param render = 0
 param use2DMap = True
 
 param extra_cars = 1
