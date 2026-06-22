@@ -50,7 +50,7 @@ class Args:
     """the maximum number of steps for any given episode"""
     model : str = "scenic.simulators.metadrive.model"
     """ underlying model for the scenic file """
-    map: str = "./CARLA/Town01.net.xml"
+    map: str = "./../CARLA/Town01.net.xml"
     """ Sumo map for the env"""
     sampler_type: str = "halton"
     """ sampling type for generating scenes"""
@@ -139,7 +139,7 @@ def make_env(env_id, idx, capture_video, run_name, gamma):
         env = gym.wrappers.RecordEpisodeStatistics(env)
         env = gym.wrappers.ClipAction(env)
         env = gym.wrappers.NormalizeObservation(env)
-        env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10))
+        env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10), observation_space=env.observation_space)
         env = gym.wrappers.NormalizeReward(env, gamma=gamma)
         env = gym.wrappers.TransformReward(env, lambda reward: np.clip(reward, -10, 10))
         return env
