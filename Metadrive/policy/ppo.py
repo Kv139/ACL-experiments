@@ -5,7 +5,7 @@ import time
 import scenic
 from dataclasses import dataclass
 from metadrive.component.sensors.semantic_camera import SemanticCamera
-from custom.custom_simulator import CustomMetaDriveSimulation, CustomMetaDriveSimulator 
+from custom.custom_simulator import MetaDriveSimulation, MetaDriveSimulator 
 
 
 import gymnasium as gym
@@ -27,7 +27,7 @@ class Args:
     """seed of the experiment"""
     torch_deterministic: bool = True
     """if toggled, `torch.backends.cudnn.deterministic=False`"""
-    cuda: bool = True
+    cuda: bool = False
     """if toggled, cuda will be enabled by default"""
     track: bool = False
     """if toggled, this experiment will be tracked with Weights and Biases"""
@@ -46,7 +46,7 @@ class Args:
     # Scenic specific arguments
     scenic_file: str = "./scenarios/driver.scenic" 
     """the scenic program defining the enviroment"""
-    max_steps: int = 100
+    max_steps: int = 1000
     """the maximum number of steps for any given episode"""
     model : str = "scenic.simulators.metadrive.model"
     """ underlying model for the scenic file """
@@ -121,14 +121,13 @@ def make_env(env_id, idx, capture_video, run_name, gamma):
                                         params={"verifaiSamplerType": args.sampler_type}))
         #shape was [100 200   3]
         # OBS needs to be updated
-        observation_space = gym.spaces.Dict({"semantic_camera": gym.spaces.Box(low=0, high=1, shape=(84,64,3), dtype=np.float32),
-                                            "actions":gym.spaces.Box(low=np.array([-1,-1]), high=np.array([1,1]), shape=(2,), dtype=np.float32)})  # Defines the possible actions of the agent
+        observation_space =observation_space=gym.spaces.Box(low=-np.inf, high=np.inf, shape=(258,))
         
         action_space = gym.spaces.Box(low=np.array([-1,-1]), high=np.array([1,1]), shape=(2,), dtype=np.float32)  # Defines the possible actions of the agent
 
         env = CustomMetaDriveEnv(
             scenario=scenario,
-            simulator=CustomMetaDriveSimulator(sumo_map=args.map,max_steps=args.max_steps),
+            simulator=MetaDriveSimulator(sumo_map=args.map),
             max_steps=args.max_steps,
             observation_space=observation_space,
             action_space=action_space,
