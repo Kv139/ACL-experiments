@@ -87,7 +87,7 @@ class CustomMetaDriveEnv(gym.Env):
     def _make_run_loop(self):
         while True:
             try:
-                if self.genetic_flag:
+                if self.genetic_flag:           
                     scene = self.get_scene()
                 else:
                     scene, _ = self.scenario.generate(feedback=self.feedback_result)
@@ -227,8 +227,11 @@ class CustomMetaDriveEnv(gym.Env):
                 scene1 = self.read_scene_bytes(idx1)
                 scene2 = self.read_scene_bytes(idx2)
                 scene = self.crossover_scences(scene1=scene1, scene2=scene2)
+                self.info['crossovers'] += 1
             elif choice == 2:
+                scene = self.read_scene_bytes(idx1)
                 scene = self.mutate_scene(self.read_scene_bytes(idx1))
+                self.info['mutations'] += 1
                 
             else:
                 self.replay = True
@@ -305,8 +308,8 @@ class CustomMetaDriveEnv(gym.Env):
             # TODO I make this same call multiple times -- consider creating a seperate function
             try: # arbritrary mutations may not be valid -- ensure that the constructed scenario is
                 scenario = scenic.scenarioFromFile(self.scenic_file,
-                                    model="scenic.simulators.webots.model",
-                                    mode2D=False,
+                                    model="scenic.simulators.metadrive.model",
+                                    mode2D=True,
                                     params=params)
             except InvalidScenarioError:
                 scenario = self.scenario
@@ -323,8 +326,10 @@ class CustomMetaDriveEnv(gym.Env):
         try: 
             if params != {}:
                 print("attempting to load mutated scene")
+            
             bytes = self.previous_scenes[id]
-            return scenario.sceneFromBytes(bytes)
+            scene = scenario.sceneFromBytes(bytes)
+            return scene
         
         except (SerializationError, KeyError, RejectionException) as e:
             print(f"failed id was {id}, scenario was genetic {modified_scenario} error type was {e}")
@@ -357,7 +362,7 @@ class CustomMetaDriveEnv(gym.Env):
             assert scene is not None
  
             try: 
-                scenario = scenic.scenarioFromFile(self.scenic_file, model="scenic.simulators.webots.model",mode2D=False,params={})
+                scenario = scenic.scenarioFromFile(self.scenic_file, model="scenic.simulators.metadrive.model",mode2D=True,params={})
             except InvalidScenarioError:
                 scenario = self.scenario
 
@@ -377,7 +382,7 @@ class CustomMetaDriveEnv(gym.Env):
 
         elif params != {} and objects is None:
             try: 
-                scenario = scenic.scenarioFromFile(self.scenic_file, model="scenic.simulators.webots.model",mode2D=False,params=params)
+                scenario = scenic.scenarioFromFile(self.scenic_file, model="scenic.simulators.metadrive.model",mode2D=True,params=params)
             except InvalidScenarioError:
                 print('Invalid Scenario instance returning original program')
                 scenario = self.scenario
