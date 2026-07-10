@@ -8,7 +8,6 @@ from gymnasium import spaces
 from typing import Callable
 import scenic.simulators.metadrive.utils as utils
 from metadrive.envs import MetaDriveEnv
-from scenic.gym import ScenicGymEnv
 from scenic.domains.driving.simulators import DrivingSimulation
 from metadrive.component.sensors.rgb_camera import RGBCamera
 from metadrive.component.sensors.semantic_camera import SemanticCamera
@@ -37,6 +36,9 @@ from scenic.domains.driving.controllers import (
 )
 from scenic.domains.driving.simulators import DrivingSimulation, DrivingSimulator
 import scenic.simulators.metadrive.utils as utils
+from metadrive.component.navigation_module.edge_network_navigation import EdgeNetworkNavigation
+
+
 
 
 class MetaDriveSimulator(DrivingSimulator):
@@ -62,6 +64,7 @@ class MetaDriveSimulator(DrivingSimulator):
         physics_world_step_size = self.timestep / decision_repeat
 
         self.vehicle_config = {}
+        self.vehicle_config=dict(navigation_module=EdgeNetworkNavigation)
         self.vehicle_config["spawn_position_heading"] = [
             (0.0, 0.0),
             0.0,
@@ -107,6 +110,18 @@ class MetaDriveSimulator(DrivingSimulator):
             num_lasers=10,
             distance=20,
         )
+        # Reward func specific:
+        self.client.config["use_lateral_reward"] = True
+        self.client.config["driving_reward"] = 1.0
+        self.client.config["speed_reward"] = 0.1
+        self.client.config["success_reward"] = 10.0
+        self.client.config["out_of_road_penalty"] = 5.0
+        self.client.config["crash_vehicle_penalty"] = 5.0
+        self.client.config["crash_sidewalk_penalty"] = 5.0
+        self.client.config["out_of_route_done"] = True
+        self.client.config["on_continuous_line_done"] = True
+        self.client.config["on_broken_line_done"] = True
+        
         return MetaDriveSimulation(
             scene,
             render=self.render,
@@ -164,13 +179,13 @@ class MetaDriveSimulation(DrivingSimulation):
         self.film_size = film_size
         self.actions = [0,0]
         self.client = client
-        print(f"Creating a new simulation instance")
         self.observation,self.info = self.client.reset()
         self.early_terminate = False
         self.max_steps = max_steps
         self.steps_taken = 0
         self.count = 0
         self.rewards = []
+        self.done = False
         super().__init__(scene, timestep=timestep, **kwargs)
 
     def createObjectInSimulator(self, obj):
@@ -189,8 +204,11 @@ class MetaDriveSimulation(DrivingSimulation):
             # Assign the MetaDrive actor to the ego
             metadrive_objects = self.client.engine.get_objects()
             obj.metaDriveActor = list(metadrive_objects.values())[0]
+            obj.metaDriveActorId = list(metadrive_objects.keys())[0]
             self.defined_ego = True
             return
+        
+        # obj.metaDriveActor[1]
 
         # For additional cars
         if obj.isVehicle:
@@ -247,7 +265,9 @@ class MetaDriveSimulation(DrivingSimulation):
         ego_obj = self.scene.objects[0]
         self.count += 1
         # action = ego_obj._collect_action()
-        self.observation, _ , _ , _ , self.info = self.client.step([self.actions[0], self.actions[1]])  # Apply action in the simulator
+        self.observation, self.reward , self.done , _ , self.info = self.client.step([self.actions[0], self.actions[1]])  # Apply action in the simulator
+        if self.done:
+            print(f"Terminating Early!")
         ego_obj._reset_control()
         # Render the scene in 2D if needed
         if self.render and not self.render3D:
@@ -347,43 +367,21 @@ class MetaDriveSimulation(DrivingSimulation):
     def get_truncation(self):
         return False
 
+    def is_done(self):
+        return self.done
+    
     
     def get_reward(self):
         """
         Return accumulated reward which is computed in the scenic program
         """
-        state = self.client.vehicle.get_state()
-
-        keys = ['crash_object', 'crash_vehicle','crash_building', 'crash_sidewalk']
-        if np.any([state[key] for key in keys]):
-            self.early_terminate = True
-            print("crash")
-            return -10
-        elif self.scene.objects[0]._lane is None and self.scene.objects[0]._intersection is None:
-            print("out of lane")
-            self.early_terminate = True
-            return -10 # Ego is no longer on the map
-        elif self.max_steps == self.steps_taken-1:
-            print("finished episode")
-            return 5 # finish the episode without leaving the road
-        else:
-            reward= self.scene.objects[0].reward
-
-        self.rewards.append(reward)
-        return reward
+        return self.reward
     
     def get_info(self):
         """
         Check for collisions 
         """
-        state = self.client.vehicle.get_state()
-
-        keys = ['crash_object', 'crash_vehicle','crash_building', 'crash_sidewalk']
-        info = {}
-        info['crash'] = np.any([state[key] for key in keys])
-        info['cte'] = self.scene.objects[0].cte
-        info["road_deviation"] = self.scene.objects[0].roadDeviation
-        return info
+        return {}
     
     
     def get_feedback(self):
