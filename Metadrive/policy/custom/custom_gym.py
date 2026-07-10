@@ -96,7 +96,7 @@ class CustomMetaDriveEnv(gym.Env):
                     self.episode_counter += 1
                     print(f'{self.episode_counter}')
                     # this first block before the while loop is for the first reset call
-                    done = lambda: not (simulation.result is None) 
+                    done = lambda: not (simulation.result is None) or simulation.is_done()
                     truncated = lambda: (steps_taken >= self.max_steps) or simulation.get_truncation()  # TODO handle cases where it is done right on maxsteps
                     observation = simulation.get_obs()
                     info = simulation.get_info() 
