@@ -6,6 +6,8 @@ import scenic
 from dataclasses import dataclass
 from metadrive.component.sensors.semantic_camera import SemanticCamera
 from custom.custom_simulator import MetaDriveSimulation, MetaDriveSimulator 
+from scenic import setDebuggingOptions
+
 
 
 import gymnasium as gym
@@ -52,25 +54,24 @@ class Args:
     """ underlying model for the scenic file """
     map: str = "./../CARLA/Town01.net.xml"
     """ Sumo map for the env"""
-    sampler_type: str = "halton"
+    sampler_type: str = "random"
     """ sampling type for generating scenes"""
     save_model: bool = True
     """whether ot save modle into the """
-    save_model: bool = True
-    """whether to save model into the `runs/{run_name}` folder"""
-    evaluate_model: bool = False
+
+    evaluate_model: bool = True
     """ Choose whether to train or skip to evalutation"""
     model_to_evaluate_path: str = "./final_models/ep5_timesteps_1m_random.cleanrl_model"
     """Path for model to evaluate"""
     model_name: str = "ep5_timesteps_1m_random_ng"
     """ model name"""
-    apply_genetic_ops = True
+    apply_genetic_ops = False
     """ flag to signal genetic operations for scene contsruction"""
 
     # Algorithm specific arguments
     env_id: str = "ACL_MetaDrive"
     """the id of the environment"""
-    total_timesteps: int = 500000
+    total_timesteps: int = 100000
     """total timesteps of the experiments"""
     learning_rate: float = 3e-4
     """the learning rate of the optimizer"""
@@ -119,9 +120,8 @@ def make_env(env_id, idx, capture_video, run_name, gamma):
                                         model=args.model,
                                         mode2D=True,
                                         params={"verifaiSamplerType": args.sampler_type}))
-        #shape was [100 200   3]
-        # OBS needs to be updated
-        observation_space =observation_space=gym.spaces.Box(low=-np.inf, high=np.inf, shape=(258,))
+
+        observation_space =observation_space=gym.spaces.Box(low=-np.inf, high=np.inf, shape=(268,))
         
         action_space = gym.spaces.Box(low=np.array([-1,-1]), high=np.array([1,1]), shape=(2,), dtype=np.float32)  # Defines the possible actions of the agent
 
@@ -131,7 +131,8 @@ def make_env(env_id, idx, capture_video, run_name, gamma):
             max_steps=args.max_steps,
             observation_space=observation_space,
             action_space=action_space,
-            file = args.scenic_file
+            file = args.scenic_file,
+            genetic_flag = args.apply_genetic_ops,
         )
 
         env = gym.wrappers.FlattenObservation(env)  # deal with dm_control's Dict observation space
@@ -185,6 +186,8 @@ class Agent(nn.Module):
 
 
 if __name__ == "__main__":
+    setDebuggingOptions(verbosity=2)
+
     args = tyro.cli(Args)
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
@@ -371,28 +374,28 @@ if __name__ == "__main__":
     if args.save_model:
         model_path = f"runs/{run_name}/{args.exp_name}.cleanrl_model"
         torch.save(agent.state_dict(), model_path)
-        print(f"model saved to {model_path}")
-        from cleanrl_utils.evals.ppo_eval import evaluate
+    #     print(f"model saved to {model_path}")
+    #     from cleanrl_utils.evals.ppo_eval import evaluate
 
-        episodic_returns = evaluate(
-            model_path,
-            make_env,
-            args.env_id,
-            eval_episodes=10,
-            run_name=f"{run_name}-eval",
-            Model=Agent,
-            device=device,
-            gamma=args.gamma,
-        )
-        for idx, episodic_return in enumerate(episodic_returns):
-            writer.add_scalar("eval/episodic_return", episodic_return, idx)
+    #     episodic_returns = evaluate(
+    #         model_path,
+    #         make_env,
+    #         args.env_id,
+    #         eval_episodes=10,
+    #         run_name=f"{run_name}-eval",
+    #         Model=Agent,
+    #         device=device,
+    #         gamma=args.gamma,
+    #     )
+    #     for idx, episodic_return in enumerate(episodic_returns):
+    #         writer.add_scalar("eval/episodic_return", episodic_return, idx)
 
-        if args.upload_model:
-            from cleanrl_utils.huggingface import push_to_hub
+    #     if args.upload_model:
+    #         from cleanrl_utils.huggingface import push_to_hub
 
-            repo_name = f"{args.env_id}-{args.exp_name}-seed{args.seed}"
-            repo_id = f"{args.hf_entity}/{repo_name}" if args.hf_entity else repo_name
-            push_to_hub(args, episodic_returns, repo_id, "PPO", f"runs/{run_name}", f"videos/{run_name}-eval")
+    #         repo_name = f"{args.env_id}-{args.exp_name}-seed{args.seed}"
+    #         repo_id = f"{args.hf_entity}/{repo_name}" if args.hf_entity else repo_name
+    #         push_to_hub(args, episodic_returns, repo_id, "PPO", f"runs/{run_name}", f"videos/{run_name}-eval")
 
     envs.close()
     writer.close()
