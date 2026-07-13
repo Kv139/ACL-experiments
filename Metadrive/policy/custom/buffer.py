@@ -1,0 +1,274 @@
+import scenic
+import math
+import random
+
+from scenic.core.simulators import Simulator, Simulation
+from scenic.core.scenarios import Scenario
+import gymnasium as gym
+from gymnasium import spaces
+
+from typing import Callable
+
+from scenic.core.errors import InvalidScenarioError
+from scenic.core.simulators import Simulator, Simulation
+from scenic.core.scenarios import Scenario, Scene
+from scenic.core.distributions import RejectionException, RandomControlFlowError
+from scenic.core.serialization import SerializationError
+
+##scene is composed of object count, type, and global parametetrs
+## e.g., car, bedestrian, global weather = rain, etc. ##treat each as one param.
+## potentially separate objects and parameters.
+##for objects/params not agent behavior
+
+##mvp: category with x feature_nums contains scenes with x objects/global params
+# then crossover/mutations
+
+class Scene:
+    """one scene reconstruction"""
+    def __init__(self, full_params, scene_id, pvl, params=None, scenario=None, s_bytes=None):
+        self.scene_id = scene_id
+        self.pvl = float(pvl)
+        self.full_params = full_params
+        self.params = params
+        self.scenario = scenario
+        self.s_bytes = s_bytes
+
+    def get_pvl(self):
+        return self.pvl
+    
+    def update(self, new_pvl=None, new_params=None, new_scenario=None, new_bytes=None):
+        if new_pvl is not None:
+            self.pvl = float(new_pvl)
+        if new_params is not None:
+            self.params = new_params
+        if new_scenario is not None:
+            self.scenario = new_scenario
+        if new_bytes is not None:
+            self.s_bytes = new_bytes
+
+    def read_scene(self, fall_scenario, scenic_file): ## dpeends on the sceenario so that scenic can compile a scne
+        if self.params is not None:
+            try: # arbritrary mutations may not be valid -- ensure that the constructed scenario is
+                scenario = scenic.scenarioFromFile(
+                    scenic_file,
+                    model="scenic.simulators.metadrive.model",
+                    mode2D=True,
+                    params=self.params
+                )
+            except InvalidScenarioError:
+                scenario = fall_scenario
+
+        elif self.scenario is not None:
+            scenario = self.scenario
+        else:
+            scenario =  fall_scenario
+        
+        scene = scenario.sceneFromBytes(self.s_bytes)
+        return scene
+
+
+class Category:
+    """sub-buffer, k categories"""
+    def __init__(self, capacity, category_id, feature_num):
+        self.category_id = category_id
+        self.capacity = capacity
+        self.scene_list = []         
+        self.samples = 0
+        self.feature_num = feature_num
+
+        ##for future implementation
+        self.pctg = 100
+        if (feature_num != 0):
+           self.pctg = 100 / feature_num
+
+    def check_full(self):
+        l = len(self.scene_list)
+        if (l >= self.capacity):
+            return True
+        return False
+    
+    def add(self, scene: Scene):
+        """add scene to kth buffer/category"""
+        if not self.check_full(): 
+            self.scene_list.append(scene)
+            return None, True
+        
+        mi = 0
+        for i in range(len(self.scene_list)):
+            if (self.scene_list[i].pvl < self.scene_list[mi].pvl):
+                mi = i
+
+        if (self.scene_list[mi].pvl < scene.pvl):
+            out = self.scene_list[mi].scene_id
+            self.scene_list[mi] = scene
+            return out, True  
+        
+        return None, False
+ 
+
+    def update(self, scene_id, new_pvl=None, new_params=None, new_scenario=None, new_bytes=None):
+        for x in self.scene_list:
+            if x.scene_id == scene_id:
+                x.update(new_pvl, new_params, new_scenario, new_bytes)
+                return True
+        return False
+    
+    def get_scene(self, scene_id):
+        for x in self.scene_list:
+            if x.scene_id == scene_id:
+                return x
+        
+        return None
+    
+    def sample(self): # call twice for crossover
+        #potentially add a k argument
+        if len(self.scene_list) == 0:
+            return None
+        
+        self.samples += 1
+        w = []
+        for i in self.scene_list:
+            pvl = i.pvl
+            if pvl < 1e-9:
+                w.append(1e-9)
+            else:
+                w.append(pvl)
+       
+        return random.choices(self.scene_list, weights=w, k=1)[0]
+    
+    
+    def mean_pvl(self):
+        total = 0.0
+        for x in self.scene_list:
+            total += x.pvl
+
+        ret = total / len(self.scene_list)
+        return ret
+    
+
+class Buffer:
+    """full buffer"""
+    def __init__(self, k, capacity, category_desc, count_params):
+        self.k = k
+        self.capacity = capacity
+        self.categories = {} #dictionary category id to category object
+        self.count_params = count_params
+        for i, feature_num in enumerate(category_desc):
+            self.categories[i] = Category(capacity, i, feature_num)
+        
+        
+        self.scene_categories = {} #scene in which category, dict scene_id: cat_id
+        
+    
+    def total_obj(self, full_params):
+        total = 0
+        for i in self.count_params:
+            x = full_params.get(i,0)
+            total += x
+        return total
+
+    def get_category(self, full_params):
+        if full_params is None:
+            return 0
+        count = self.total_obj(full_params)
+        for x in sorted(self.categories):
+            if (count <= self.categories[x].feature_num):
+                return x
+
+        return max(self.categories)        
+    
+
+    def add(self, scene_id, full_params, pvl, params=None, scenario=None, s_bytes=None):
+        """add scene to category"""
+        category_id = self.get_category(full_params)
+        scene = Scene(full_params, scene_id, pvl, params=params, scenario=scenario, s_bytes=s_bytes)
+
+        out, b = self.categories[category_id].add(scene)
+        if (b):
+            self.scene_categories[scene_id] = category_id
+            if out is not None:
+                self.scene_categories.pop(out, None) #pop dictionary by key
+
+    def update(self, scene_id, new_pvl=None, new_params=None, new_scenario=None, new_bytes=None):
+        category_id = self.scene_categories.get(scene_id)
+        if category_id is None:
+            return False
+        self.categories[category_id].update(scene_id, new_pvl, new_params, new_scenario, new_bytes)
+        return True
+
+    #helper for getting scene for mutation
+    def sample_category(self, timesteps, total):
+        filled = []
+        for n in self.categories.values():
+            if len(n.scene_list) > 0:
+                filled.append(n)
+
+        if len(filled) == 0:
+            return None
+        
+        maxf =  1
+        for i in self.categories.values():
+            maxf =  max(maxf, i.feature_num)
+        
+        progress = timesteps/total
+        ##probability of picking category i, higher if feature num is lower and ealiers
+        w =[]
+        for i in filled:
+            diff = i.feature_num / maxf
+            ##1 - diff -> if difficulty is easy, more likely to be picked at beginning
+            ##1 - progress: if progress is l
+            prob = (1 - progress) * (1 - diff) + (progress * diff)
+            w.append(prob)
+
+        if sum(w) == 0:
+            w = [1.0] * len(filled) 
+
+        chosen = random.choices(filled, weights=w, k = 1)[0]
+        return chosen
+    
+
+    ##select scene for mutation
+    def sample_scene(self, timesteps, total):
+        samp_category = self.sample_category(timesteps, total)
+        if samp_category is None:
+            return None
+        samp_scene = samp_category.sample()
+        return samp_scene
+    
+
+    ##these simply seelct scenes for crossover
+    def crossover_same(self, timesteps, total):
+        for x in range(10):
+            samp_category = self.sample_category(timesteps, total)
+            if samp_category is None:
+                return None
+            if (len(samp_category.scene_list) >= 2):
+                for i in range(1000):
+                    s1 = samp_category.sample()
+                    s2 = samp_category.sample()
+                    if (s1 != s2):
+                        return s1, s2
+        return None
+
+    def crossover_diff(self, timesteps, total):
+        
+        for i in range(1000):
+            n1 = self.sample_category(timesteps, total)
+            n2 = self.sample_category(timesteps, total)
+            if n1 is None or n2 is None:
+                return None
+            if (n1 != n2):
+                s1 = n1.sample()
+                s2 = n2.sample()
+                return s1, s2
+        return None
+    
+    def get_scene(self, scene_id):
+        category_id = self.scene_categories.get(scene_id)
+        if category_id is None:
+            return None
+        return self.categories[category_id].get_scene(scene_id)
+
+
+    def total_pvl():
+        return

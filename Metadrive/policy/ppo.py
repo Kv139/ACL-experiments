@@ -18,7 +18,8 @@ import torch.optim as optim
 import tyro
 from torch.distributions.normal import Normal
 from torch.utils.tensorboard import SummaryWriter
-from custom.custom_gym import CustomMetaDriveEnv
+from custom.gym_w_buffer import CustomMetaDriveEnv
+# from custom.custom_gym import CustomMetaDriveEnv
 
 
 @dataclass
@@ -65,7 +66,7 @@ class Args:
     """Path for model to evaluate"""
     model_name: str = "ep5_timesteps_1m_random_ng"
     """ model name"""
-    apply_genetic_ops = False
+    apply_genetic_ops = True
     """ flag to signal genetic operations for scene contsruction"""
 
     # Algorithm specific arguments
@@ -113,6 +114,9 @@ class Args:
     """the number of iterations (computed in runtime)"""
 
 
+    capacity: int = 20
+    start_genetic: int = 25
+
 def make_env(env_id, idx, capture_video, run_name, gamma):
     def thunk():
    
@@ -133,6 +137,9 @@ def make_env(env_id, idx, capture_video, run_name, gamma):
             action_space=action_space,
             file = args.scenic_file,
             genetic_flag = args.apply_genetic_ops,
+            total_timesteps=args.total_timesteps,  
+            buffer_capacity=args.capacity,
+            start_genetic=args.start_genetic           
         )
 
         env = gym.wrappers.FlattenObservation(env)  # deal with dm_control's Dict observation space

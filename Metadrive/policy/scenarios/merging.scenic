@@ -7,31 +7,16 @@ param time_step = 1.0/10
 param verifaiSamplerType = 'halton'
 param use2DMap = True
 
-param extra_cars = 0
-param brake_checkers = 0
-param tailgaters = 0
-param merging_cars = 0
-param obstacles = 0
+param extra_cars = 1
 
 import numpy as np
 TERMINATE_TIME = 40 / globalParameters.time_step
-######brakign
-behavior brakeChecking(distanceToTrigger = 10):
-	try:
-		do FollowLaneBehavior(target_speed=5)
-	interrupt when (distance from self to ego) < distanceToTrigger:
-		while True:
-			print ("BREAKKK")
-			take SetBrakeAction(1), SetThrottleAction(0)
 
-##tailgater
-behavior tailGate(target_gap = 4):
-    while True:
-		if distance from self to ego > target_gap:
-			take SetThrottleAction(0.01), SetBrakeAction(0)
-		else:
-			take SetThrottleAction(0), SetBrakeAction(1) 
-
+"""
+Setting global params for the road, land, starting and stoping
+Scene defining variables should be global params in order to allow for
+easily mutating later
+"""
 
 def get_nearest_centerline(obj):
 	min_dist = np.inf
@@ -41,6 +26,10 @@ def get_nearest_centerline(obj):
 			min_dist = dist
 			centerline = lane.centerline
 	return centerline
+
+
+
+# TODO fix params -- need more variabiltiy and ensure that modified scenes make!
 
 
 param select_road = VerifaiOptions([*network.roads])
@@ -55,47 +44,15 @@ start2 = Uniform(*globalParameters.distractor_lane.centerline.points)
 start = (start[0] @ start[1])
 start2 = (start2[0] @ start2[1])
 
+flow_lane = globalParameters.select_lane
+
 ego = new Car on start, facing roadDirection, with observation 0, with cte 0 
 distractor = new Car on start2, with behavior DriveAvoidingCollisions(target_speed=10, avoidance_threshold=12)
 
-
-#--------new stuf
-# for i in range(globalParameters.brake_checkers):
-#     new Car ahead of ego by Range(15, 20) + i * 20, facing roadDirection, with behavior brakeChecking(distanceToTrigger=Range(10, 15))
-
-# for i in range(globalParameters.tailgaters):
-#     new Car behind ego by Range(10, 20) + i * 20, facing roadDirection, with behavior tailGate(target_gap=Range(3, 5))
-
-
-for i in range(globalParameters.brake_checkers):
-    lane = Uniform(*network.lanes)
-    x = new OrientedPoint on lane.centerline
-    new Car at x, with behavior brakeChecking(distanceToTrigger=Range(10, 15))
-
-for i in range(globalParameters.tailgaters):
-    lane = Uniform(*network.lanes)
-    x = new OrientedPoint on lane.centerline
-    new Car at x, with behavior tailGate(target_gap=Range(3, 5))
-
-prev_merge = distractor
-for i in range(globalParameters.merging_cars):
-    prev_merge = new Car ahead of prev_merge by 20, with behavior FollowLaneBehavior(target_speed=10, laneToFollow=None, is_oppositeTraffic=False)
-
-for i in range(globalParameters.obstacles):
-    lane = Uniform(*network.lanes)
-    spot = new OrientedPoint on lane.centerline
-    cardegree = Uniform(1.0, -1.0) * Range(45, 90) deg
-    new Car at spot, facing cardegree relative to roadDirection, with allowCollisions True
-
-for i in range(globalParameters.extra_cars):
-    random_lane = Uniform(*network.lanes)
-    random_point = Uniform(*random_lane.centerline.points)
-    random_pos = (random_point[0] @ random_point[1])
-    random_speed = Range(12, 15)
-    new Car on random_pos, with behavior DriveAvoidingCollisions(target_speed=random_speed, avoidance_threshold=12)
-
-
-
+car2 = new Car ahead of distractor by 20, with behavior FollowLaneBehavior(target_speed=10, laneToFollow=None, is_oppositeTraffic=False)
+car3 = new Car ahead of car2 by 20, with behavior FollowLaneBehavior(target_speed=10, laneToFollow=None, is_oppositeTraffic=False)
+car4 = new Car ahead of car3 by 20, with behavior FollowLaneBehavior(target_speed=10, laneToFollow=None, is_oppositeTraffic=False)
+car5 = new Car ahead of car4 by 20, with behavior FollowLaneBehavior(target_speed=10, laneToFollow=None, is_oppositeTraffic=False)
 monitor DrivingReward(obj):
 	curr_lane = obj._lane
 	while True:
