@@ -74,8 +74,8 @@ class CustomMetaDriveEnv(gym.Env):
         self.scene_diversity = {} ##for future
 
         ##custom buffer stuff
-        self.k = 7
-        self.category_desc = [1, 3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 40, 50, 70]
+        self.category_desc = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19]
+        self.k = 10
         self.parameters = {
             "select_road": {"choices": None, "group": "ego"},
             "select_lane": {"choices": None, "group": "ego"},
