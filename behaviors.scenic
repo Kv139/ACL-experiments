@@ -32,7 +32,7 @@ def vehicleAheadBehindCheck(ego_obj,threshold, cone = 10 deg):
         return False
 
         
-behavior DriveAvoidingCollisions(target_speed=25, avoidance_threshold=10, angle_threshold = 10 deg):
+behavior DriveAvoidingCollisions(target_speed=25, avoidance_threshold=5, angle_threshold = 10 deg):
     try:
         do FollowLaneBehavior(target_speed=target_speed)
     interrupt when vehicleAheadBehindCheck(self,avoidance_threshold, angle_threshold):
