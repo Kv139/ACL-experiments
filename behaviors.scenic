@@ -17,7 +17,7 @@ behavior ConstantThrottleBehavior(x):
         take SetThrottleAction(x), SetReverseAction(False), SetHandBrakeAction(False)
 def vehicleAheadBehindCheck(ego_obj,threshold, cone = 10 deg):
     for obj in simulation().objects:
-        if obj is ego_obj or not isinstance(obj, _model.Vehicle):
+        if obj is ego_obj or not isinstance(obj, _model.Vehicle) or obj._lane is not ego_obj._lane:
             print("ignored")
             continue
         d = distance from ego_obj to obj
@@ -27,7 +27,7 @@ def vehicleAheadBehindCheck(ego_obj,threshold, cone = 10 deg):
         vector_of_angle = angle from ego_obj to obj
         relative_angle = vector_of_angle - ego_obj.heading
         if abs(relative_angle) < cone or abs(relative_angle) >= (180 deg):
-            print("angle check")
+            print(f"angle check{deg}")
             return True 
         return False
 
