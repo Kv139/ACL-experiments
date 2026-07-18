@@ -8,8 +8,6 @@ from metadrive.component.sensors.semantic_camera import SemanticCamera
 from custom.custom_simulator import MetaDriveSimulation, MetaDriveSimulator 
 from scenic import setDebuggingOptions
 
-
-
 import gymnasium as gym
 import numpy as np
 import torch

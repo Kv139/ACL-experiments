@@ -275,11 +275,11 @@ class Buffer:
         return ret
 
     ##these simply seelct scenes for crossover
-
     def crossover_same(self, agent_steps, total_timesteps):
         non_empty = [c for c in self.categories.values() if c.total_scenes() >= 2]
         if not non_empty:
             return None
+
         progress = agent_steps / total_timesteps
         maxf = max(c.feature_num for c in self.categories.values())
         w = []
@@ -300,7 +300,6 @@ class Buffer:
         scene2.samples += 1
         category.samples += 2
         return scene1, scene2
-
     def crossover_diff(self, timesteps, total):
         
         for i in range(1000):
@@ -325,16 +324,8 @@ class Buffer:
 
     def total_pvl(self):
         return sum(s.pvl for cat in self.categories.values() for s in cat.scene_list)
-    
-    def snapshot(self, episode: int) -> dict:
-        row = {"episode": episode, "total_scenes": self.total_scenes()}
-        for cid in sorted(self.categories):
-            cat = self.categories[cid]
-            row[f"cat{cid}_n"] = cat.total_scenes()
-            row[f"cat{cid}_pvl_mean"] = cat.mean_pvl()
-            row[f"cat{cid}_samples"] = cat.samples
-        return row
-        # ----- diagnostics -----
+
+    # ----- diagnostics -----
 
     def summary(self, verbose=False):
         """print buffer contents by category"""
@@ -376,4 +367,4 @@ class Buffer:
 
     def bucket_occupancy(self):
         """kept for backward compatibility with gym_w_buffer.py — delegates to value_distribution"""
-        self.value_distribution()   
+        self.value_distribution()

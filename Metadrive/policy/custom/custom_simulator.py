@@ -44,7 +44,7 @@ from metadrive.component.navigation_module.edge_network_navigation import EdgeNe
 class MetaDriveSimulator(DrivingSimulator):
     """Implementation of `Simulator` for MetaDrive."""
 
-    def __init__(self,timestep=0.1,render=True,render3D=False,sumo_map=None,real_time=False,max_steps=1000):
+    def __init__(self,timestep=0.1,render=False,render3D=False,sumo_map=None,real_time=False,max_steps=1000):
         super().__init__()
         self.render = render
         self.render3D = render3D if render else False

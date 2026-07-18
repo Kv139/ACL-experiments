@@ -19,45 +19,11 @@ from typing import Callable
 import numpy as np
 import random
 import scenic
-import csv
-import os
-import time
 
 from scenic.core.errors import setDebuggingOptions, InvalidScenarioError
 
 setDebuggingOptions(verbosity=0, fullBacktrace=False, debugExceptions=False, debugRejections=False)
 
-from dataclasses import dataclass, asdict, field
-
-@dataclass
-class EpisodeRecord:
-    episode: int = 0
-    op_actual: str = ""
-    category_id: int = -1
-    #curriculum tracking
-    generation_source: str = ""
-    params_mutated: list = field(default_factory=list)
-    params_crossed: list = field(default_factory=list)
-    n_params_differ: int = 0
-    #paraeters
-    ego_speed: float = 0.0
-    ego_on_intersection: int = 0
-    intersection_has_cars: int = 0
-    distractor_cars: int = 0
-    has_brake_checker: int = 0
-    has_cluster: int = 0
-    maximum_distractor_speed: float = 0.0
-    distance_to_nearest: float = 0.0
-    cluster_dist: float = 0.0
-    brake_dist: float = 0.0
-    intersection_cars: int = 0
-    #results
-    num_steps: int = 0
-    reward_sum: float = 0.0
-    pvl: float = 0.0
-    #failures  
-    failure: str = ""
-    termination_reason: str = ""
 
 
 #TODO make ResetException
@@ -85,8 +51,7 @@ class CustomMetaDriveEnv(gym.Env):
                  parameters: list = None,
                  total_timesteps: int = 200000, ##agent steps across all episodes
                  buffer_capacity: int = 20,
-                 start_genetic: int = 25,
-                 log_dir: str = "logs",
+                 start_genetic: int = 25
                  ):
 
         assert render_mode is None or render_mode in self.metadata["render_modes"]
@@ -167,86 +132,10 @@ class CustomMetaDriveEnv(gym.Env):
     ##PRINT STATEMENTS
         self.info= {'crossovers': 0, 'mutations': 0, 'replays': 0, 'generations': 0, "param_failures": 0, "scenario_failures": 0, "generation_failures": 0}
 
-        self.gen_source = "fresh"
-        self.last_mutated_params = []
-        self.last_crossed_params = []
-        self.last_parent_params = None
-        self.last_failure = ""
-        self._termination_reason = ""
-
-        os.makedirs(log_dir, exist_ok=True)
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        self.csv_path = os.path.join(log_dir, f"episodes_{timestamp}.csv")
-        self.csv_file = open(self.csv_path, "w", newline="")
-        self.csv_writer = None
-
-    def log_episode(self, record):
-        row = asdict(record)
-        row["params_mutated"] = "|".join(row["params_mutated"])
-        row["params_crossed"] = "|".join(row["params_crossed"])
-        if self.csv_writer is None:
-            self.csv_writer = csv.DictWriter(self.csv_file, fieldnames=list(row.keys()))
-            self.csv_writer.writeheader()
-        self.csv_writer.writerow(row)
-        self.csv_file.flush()
-
-    def write_record(self, pvl):
-        p = self.curr_full_params or {}
-        n_differ = 0
-        if self.last_parent_params is not None:
-            n_differ = sum(
-                1 for k in self.parameters
-                if k in self.last_parent_params and k in p
-                and self.last_parent_params[k] != p[k]
-            )
-
-        record = EpisodeRecord(
-            episode=self.episode_counter - 1,
-            op_actual=self.gen_source,
-            category_id=self.buffer.get_category(p),
-            generation_source=self.gen_source,
-            params_mutated=list(self.last_mutated_params),
-            params_crossed=list(self.last_crossed_params),
-            n_params_differ=n_differ,
-            ego_speed=float(p.get("ego_speed", 0.0)),
-            ego_on_intersection=int(p.get("ego_on_intersection", 0)),
-            intersection_has_cars=int(p.get("intersection_has_cars", 0)),
-            distractor_cars=int(p.get("distractor_cars", 0)),
-            has_brake_checker=int(p.get("has_brake_checker", 0)),
-            has_cluster=int(p.get("has_cluster", 0)),
-            maximum_distractor_speed=float(p.get("maximum_distractor_speed", 0.0)),
-            distance_to_nearest=float(p.get("distance_to_nearest", 0.0)),
-            cluster_dist=float(p.get("cluster_dist", 0.0)),
-            brake_dist=float(p.get("brake_dist", 0.0)),
-            intersection_cars=int(p.get("intersection_cars", 0)),
-            num_steps=len(self.episode_rewards),
-            reward_sum=float(sum(self.episode_rewards)) if self.episode_rewards else 0.0,
-            pvl=float(pvl),
-            failure=self.last_failure,
-            termination_reason=self._termination_reason,
-        )
-        self.log_episode(record)
-        self.last_failure = ""
-
-    def _classify_termination(self, info, simulation, steps_taken):
-        if simulation.result is not None:
-            return "scenic_monitor"
-        if info.get("arrive_dest"):
-            return "arrive_dest"
-        if info.get("crash_vehicle"):
-            return "crash_vehicle"
-        if info.get("crash_object") or info.get("crash_building"):
-            return "crash_object"
-        if info.get("out_of_road"):
-            return "out_of_road"
-        if steps_taken >= self.max_steps or info.get("max_step"):
-            return "max_steps"
-        return ""
 
     def _make_run_loop(self):
         while True:
             try:
-                self._termination_reason = ""
                 if self.genetic_flag:           
                     scene = self.get_scene()
                 else:
@@ -279,17 +168,9 @@ class CustomMetaDriveEnv(gym.Env):
                             info = simulation.get_info()
                             reward = simulation.get_reward()
                             if done():
-                                self._termination_reason = self._classify_termination(info, simulation, steps_taken)
                                 # record whether the final step was truncation vs termination
                                 # (matters for GAE: truncated final steps should bootstrap V, terminated shouldn't)
-                                # crashes / off-road must be treated as terminal (bootstrap 0) — otherwise
-                                # PPO bootstraps V(crashed_state) into the return and the agent can exploit
-                                # early return by preferring cheap crashes over hard scenes.
-                                self.last_step_truncated = (
-                                    truncated()
-                                    and (simulation.result is None)
-                                    and self._termination_reason not in ("crash_vehicle", "crash_object", "out_of_road")
-                                )
+                                self.last_step_truncated = truncated() and (simulation.result is None)
                                 # only run feedback + record when Scenic actually produced a result
                                 # (MetaDrive-only terminations leave simulation.result as None)
                                 if simulation.result is not None:
@@ -306,7 +187,6 @@ class CustomMetaDriveEnv(gym.Env):
                 except Exception as e:
                     print(f"Simulator init failed: {type(e).__name__}: {e}. Skipping scene.")
                     self.info['scenario_failures'] += 1
-                    self.last_failure = type(e).__name__
                     continue
                     
             except ResetException:
@@ -343,8 +223,6 @@ class CustomMetaDriveEnv(gym.Env):
         pass
 
     def close(self):
-        if hasattr(self, "csv_file") and not self.csv_file.closed:
-            self.csv_file.close()
         self.simulator.destroy()
 
     def log_episode_stats(self,reward,value):
@@ -364,7 +242,6 @@ class CustomMetaDriveEnv(gym.Env):
         
         :Compute the average postive value loss per episode 
         """
-        pvl = 0.0
         if len(self.episode_rewards)>= 1 and len(self.episode_values) >= 1:
             lastgaelam = 0 
             advantages = [0] * len(self.episode_rewards) # hold the  
@@ -391,7 +268,6 @@ class CustomMetaDriveEnv(gym.Env):
                 result = -np.tanh(pvl) + 0.1
                 self.feedback_result = result
                # print(f"feedback result was {self.feedback_result} with raw pvl of {pvl}")
-                self.write_record(float(pvl))
                 return 
             ##compute pvl, add episode to buffer
 
@@ -420,8 +296,6 @@ class CustomMetaDriveEnv(gym.Env):
                     scenario=self.curr_scenario,
                     s_bytes=self.curr_bytes
                 )
-
-        self.write_record(float(pvl))
     
     def groups(self):
         groups = {}
@@ -478,10 +352,6 @@ class CustomMetaDriveEnv(gym.Env):
         TODO : Add a weighted probability calculation for previously seen scenes
         """
         self.replay = False
-        self.gen_source = "fresh"
-        self.last_mutated_params = []
-        self.last_crossed_params = []
-        self.last_parent_params = None
         if self.episode_counter % 10 == 0:
             print(f"Counts: {self.info}")
             self.buffer.summary(verbose=False)
@@ -503,7 +373,6 @@ class CustomMetaDriveEnv(gym.Env):
                         scene = self.generate_fresh()
                         self.info['generations'] += 1
                     else:
-                        self.gen_source = "crossover"
                         scene = self.crossover_scenes(scene1=s1, scene2=s2)
                         self.info['crossovers'] += 1
             elif choice == 2:
@@ -514,7 +383,10 @@ class CustomMetaDriveEnv(gym.Env):
                 else:
                     s1 = ret
                     s1 = self.read_scene_bytes(s1.scene_id)
-                    self.gen_source = "mutation"
+                    # if s1 is None:
+                    #     scene = self.generate_fresh()
+                    #     self.info['generations'] += 1
+                    # else:
                     scene = self.mutate_scene(scene=s1)
                     self.info['mutations'] += 1
                 
@@ -525,8 +397,12 @@ class CustomMetaDriveEnv(gym.Env):
                     self.info['generations'] += 1
                 else:
                     self.replay = True
-                    self.gen_source = "replay"
                     scene = self.read_scene_bytes(ret.scene_id)
+                    # if scene is None:
+                        # scene = self.generate_fresh()
+                        # self.info['generations'] += 1
+                    # else:
+                        # self.replay = True
                     self.info['replays'] += 1
                     self.replay_id = ret.scene_id  #you only take items where pvl is above avg pvl in buffer
 
@@ -541,17 +417,12 @@ class CustomMetaDriveEnv(gym.Env):
         Generate a new program with traits from two differnt programs 
         """  
         params = {}
-        from_p2 = []
         for i, keys in self.groups().items():
             c = random.choice([scene1, scene2])
             for k in keys:
                 if k in c.params:
                     params[k] = c.params[k]
-                    if c is scene2:
-                        from_p2.append(k)
         params = self.normalize_params(params)
-        self.last_crossed_params = from_p2
-        self.last_parent_params = dict(scene1.params) if scene1.params else {}
         new_scene = self.generate_scene(params=params)
         return new_scene
     
@@ -566,8 +437,6 @@ class CustomMetaDriveEnv(gym.Env):
         """ 
         groups = self.groups()
         target = random.choice(list(groups.keys()))
-        self.last_mutated_params = list(groups[target])
-        self.last_parent_params = dict(scene.params) if scene.params else {}
         params = {}
         for name, keys in groups.items():
             if name == target:

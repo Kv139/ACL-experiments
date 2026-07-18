@@ -1,7 +1,8 @@
 from scenic.gym import ScenicGymEnv
 import scenic
 from custom.custom_simulator import CustomMetaDriveSimulation, CustomMetaDriveSimulator 
-from custom.custom_gym import CustomMetaDriveEnv
+# from custom.custom_gym import CustomMetaDriveEnv
+from custom.gym_w_buffer import CustomDriveEnv
 
 from scenic.simulators.metadrive import MetaDriveSimulator
 #from custom_env import MetaDriveEnv
