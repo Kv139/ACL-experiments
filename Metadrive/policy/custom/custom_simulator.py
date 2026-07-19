@@ -381,7 +381,7 @@ class MetaDriveSimulation(DrivingSimulation):
         """
         Check for collisions 
         """
-        return {}
+        return self.info if self.info is not None else {}
     
     
     def get_feedback(self):

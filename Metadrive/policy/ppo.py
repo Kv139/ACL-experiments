@@ -114,6 +114,7 @@ class Args:
 
     capacity: int = 20
     start_genetic: int = 25
+    nk_buffer: bool = True
 
 def make_env(env_id, idx, capture_video, run_name, gamma):
     def thunk():
@@ -137,7 +138,8 @@ def make_env(env_id, idx, capture_video, run_name, gamma):
             genetic_flag = args.apply_genetic_ops,
             total_timesteps=args.total_timesteps,  
             buffer_capacity=args.capacity,
-            start_genetic=args.start_genetic           
+            start_genetic=args.start_genetic,
+            nk_buffer = args.nk_buffer       
         )
 
         env = gym.wrappers.FlattenObservation(env)  # deal with dm_control's Dict observation space

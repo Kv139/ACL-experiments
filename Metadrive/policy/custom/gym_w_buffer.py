@@ -87,6 +87,7 @@ class CustomMetaDriveEnv(gym.Env):
                  buffer_capacity: int = 20,
                  start_genetic: int = 25,
                  log_dir: str = "logs",
+                 nk_buffer: bool = True
                  ):
 
         assert render_mode is None or render_mode in self.metadata["render_modes"]
@@ -108,9 +109,23 @@ class CustomMetaDriveEnv(gym.Env):
 
         self.scene_diversity = {} ##for future
 
+
+        self.nk_buffer = nk_buffer
+
         ##custom buffer stuff
         self.category_desc = [1, 2, 3, 5, 8, 12, 18]
         self.k = 7
+
+        if self.nk_buffer:
+            self.k = 7
+            category_desc = self.category_desc
+            per_cat_cap = buffer_capacity
+        else:
+            self.k = 1
+            category_desc = [float("inf")]
+            per_cat_cap = buffer_capacity 
+
+            
         self.parameters = {
             "select_road": {"choices": None, "group": "ego", "buckets": 1},
             "select_lane": {"choices": None, "group": "ego", "buckets": 1},
@@ -140,7 +155,7 @@ class CustomMetaDriveEnv(gym.Env):
         for k, v in self.parameters.items():
             choices[k] = v["choices"]
             buckets[k] = v["buckets"]
-        self.buffer = Buffer(k=self.k, count_params=self.count_params, capacity=buffer_capacity, category_desc=self.category_desc, choices=choices, buckets=buckets)
+        self.buffer = Buffer(k=self.k, count_params=self.count_params, capacity=per_cat_cap, category_desc=category_desc, choices=choices, buckets=buckets)
         self.start_genetic = start_genetic
         self.total_timesteps = total_timesteps
         self.agent_steps = 0 ##agent steps ACROSS ALL EPISODES, fr tottal_tiemsteps ACROSS ALL EPISODES
@@ -172,7 +187,8 @@ class CustomMetaDriveEnv(gym.Env):
         self.last_crossed_params = []
         self.last_parent_params = None
         self.last_failure = ""
-        self._termination_reason = ""
+        self.termination_reason = ""
+        self.last_info = {}    
 
         os.makedirs(log_dir, exist_ok=True)
         timestamp = time.strftime("%Y%m%d_%H%M%S")
@@ -191,6 +207,11 @@ class CustomMetaDriveEnv(gym.Env):
         self.csv_file.flush()
 
     def write_record(self, pvl):
+        if not self.termination_reason:
+            if len(self.episode_rewards) >= self.max_steps:
+                self.termination_reason = "max_step"  
+            else:
+                self.termination_reason = "unknown"
         p = self.curr_full_params or {}
         n_differ = 0
         if self.last_parent_params is not None:
@@ -223,30 +244,26 @@ class CustomMetaDriveEnv(gym.Env):
             reward_sum=float(sum(self.episode_rewards)) if self.episode_rewards else 0.0,
             pvl=float(pvl),
             failure=self.last_failure,
-            termination_reason=self._termination_reason,
+            termination_reason=self.termination_reason,
         )
         self.log_episode(record)
         self.last_failure = ""
 
-    def _classify_termination(self, info, simulation, steps_taken):
+    def get_term(self, info, simulation, steps_taken):
         if simulation.result is not None:
             return "scenic_monitor"
-        if info.get("arrive_dest"):
-            return "arrive_dest"
-        if info.get("crash_vehicle"):
-            return "crash_vehicle"
-        if info.get("crash_object") or info.get("crash_building"):
-            return "crash_object"
-        if info.get("out_of_road"):
-            return "out_of_road"
-        if steps_taken >= self.max_steps or info.get("max_step"):
-            return "max_steps"
-        return ""
+        info = info or {}
+        for i in ("arrive_dest", "crash_vehicle", "crash_object", "crash_sidewalk","out_of_road", "max_step"):
+            if info.get(i):
+                return i
+        if steps_taken >= self.max_steps:
+            return "max_step"
+        return "scenic_terminate"
 
     def _make_run_loop(self):
         while True:
             try:
-                self._termination_reason = ""
+                self.termination_reason = ""
                 if self.genetic_flag:           
                     scene = self.get_scene()
                 else:
@@ -258,9 +275,7 @@ class CustomMetaDriveEnv(gym.Env):
                         steps_taken = 0
                         self.episode_counter += 1
                         print(f'{self.episode_counter}')
-                        # this first block before the while loop is for the first reset call
-                        # done() now checks BOTH Scenic's result AND the simulator's own done flag
-                        # (MetaDrive can terminate on crash / out-of-road / arrive-dest before Scenic decides)
+        
                         done = lambda: (simulation.result is not None) or simulation.is_done()
                         truncated = lambda: (steps_taken >= self.max_steps) or simulation.get_truncation()
                         observation = simulation.get_obs()
@@ -269,29 +284,19 @@ class CustomMetaDriveEnv(gym.Env):
                         simulation.actions = actions # TODO add action dict to simulation interfaces
 
                         while not done():
-                            # Probably good that we advance first before any action is set.
-                            # this is consistent with how reset works
-                            # if steps_taken % 50 == 0:
-                            #     print(f"[EP {self.episode_counter}] step {steps_taken}", flush=True)
                             simulation.advance()
                             steps_taken += 1
                             observation = simulation.get_obs()
                             info = simulation.get_info()
+                            self.last_info = info if isinstance(info, dict) else {}
                             reward = simulation.get_reward()
                             if done():
-                                self._termination_reason = self._classify_termination(info, simulation, steps_taken)
-                                # record whether the final step was truncation vs termination
-                                # (matters for GAE: truncated final steps should bootstrap V, terminated shouldn't)
-                                # crashes / off-road must be treated as terminal (bootstrap 0) — otherwise
-                                # PPO bootstraps V(crashed_state) into the return and the agent can exploit
-                                # early return by preferring cheap crashes over hard scenes.
+                                self.termination_reason = self.get_term(info, simulation, steps_taken)
                                 self.last_step_truncated = (
                                     truncated()
                                     and (simulation.result is None)
-                                    and self._termination_reason not in ("crash_vehicle", "crash_object", "out_of_road")
+                                    and self.termination_reason == "max_step"
                                 )
-                                # only run feedback + record when Scenic actually produced a result
-                                # (MetaDrive-only terminations leave simulation.result as None)
                                 if simulation.result is not None:
                                     self.feedback_result = self.feedback_fn(simulation.result)
                                     if self.record_scenic_sim_results:
@@ -370,8 +375,6 @@ class CustomMetaDriveEnv(gym.Env):
             advantages = [0] * len(self.episode_rewards) # hold the  
             for t in reversed(range(len(self.episode_rewards))):
                 if t == len(self.episode_rewards) - 1:
-                    # if truncated (not terminated), bootstrap with V(s_T) rather than 0
-                    # -- otherwise we throw away the value estimate at the max_steps boundary
                     if self.last_step_truncated:
                         next_v = self.episode_values[t]
                         nextnonterminal = 1
@@ -657,7 +660,7 @@ class CustomMetaDriveEnv(gym.Env):
                 self.curr_params = params
                 self.curr_scenario = scenario 
             except RejectionException:
-                print(f"Rejection Exception occurred: returning original scene sample")
+                self.last_failure = "rejection_fallback"   
                 scenario = self.scenario
                 new_scene, _ = scenario.generate()
                 self.curr_scenario = scenario   

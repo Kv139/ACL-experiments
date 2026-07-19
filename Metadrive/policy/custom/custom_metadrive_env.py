@@ -43,19 +43,25 @@ class DriveEnv(BaseEnv):
         if self._is_arrive_destination(vehicle):
             reward = +self.config["success_reward"]
             self.done = True
+            step_info["arrive_dest"] = True
         elif self._is_out_of_road(vehicle):
             reward = -self.config["out_of_road_penalty"]
             self.done = True
+            step_info["out_of_road"] = True
         elif vehicle.crash_vehicle:
             reward = -self.config["crash_vehicle_penalty"]
             self.done = True
+            step_info["crash_vehicle"] = True
         elif vehicle.crash_object:
             reward = -self.config["crash_object_penalty"]
             self.done = True
+            step_info["crash_object"] = True
         elif vehicle.crash_sidewalk:
             reward = -self.config["crash_sidewalk_penalty"]
             self.done = True
-        return reward, {}
+            step_info["crash_sidewalk"] = True
+
+        return reward, step_info
 
     def cost_function(self, agent):
         """Dummy cost function."""
@@ -84,7 +90,7 @@ class DriveEnv(BaseEnv):
             (0.5 - vehicle.navigation.get_current_lane_num()) * vehicle.navigation.get_current_lane_width()
         )
         return flag
-    
+
     def _is_out_of_road(self, vehicle):
         ret = not vehicle.on_lane
         if self.config["out_of_route_done"]:
