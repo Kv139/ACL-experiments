@@ -130,7 +130,6 @@ class CustomMetaDriveEnv(gym.Env):
             "select_road": {"choices": None, "group": "ego", "buckets": 1},
             "select_lane": {"choices": None, "group": "ego", "buckets": 1},
 
-            "ego_speed": {"choices": [5, 10, 15, 20], "group": "ego", "buckets": 2},
             "ego_on_intersection": {"choices": [0, 1], "group": "ego", "buckets": 2},
             "intersection_has_cars": {"choices": [0, 1], "group": "ego", "buckets": 2},
 
@@ -229,7 +228,6 @@ class CustomMetaDriveEnv(gym.Env):
             params_mutated=list(self.last_mutated_params),
             params_crossed=list(self.last_crossed_params),
             n_params_differ=n_differ,
-            ego_speed=float(p.get("ego_speed", 0.0)),
             ego_on_intersection=int(p.get("ego_on_intersection", 0)),
             intersection_has_cars=int(p.get("intersection_has_cars", 0)),
             distractor_cars=int(p.get("distractor_cars", 0)),
@@ -268,6 +266,7 @@ class CustomMetaDriveEnv(gym.Env):
                     scene = self.get_scene()
                 else:
                     scene, _ = self.scenario.generate(feedback=self.feedback_result)
+                    self.curr_full_params = dict(scene.params) if scene.params else {}
                 print(f"[episode {self.episode_counter+1}] params: {self.curr_full_params}")
 
                 try:

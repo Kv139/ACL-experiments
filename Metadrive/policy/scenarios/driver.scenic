@@ -14,7 +14,6 @@ param distractor_cars = 0
 param has_brake_checker = 0
 param intersection_cars = 0
 
-param ego_speed = 0
 param ego_on_intersection = 0
 param intersection_has_cars = 0
 param has_cluster = 0 ###has cluster fo cars in front of ego
@@ -25,7 +24,7 @@ param cluster_dist = 5
 
 param maximum_distractor_speed = 10
 param brake_dist = 20
-param inter_shuffle_seed = DiscreteRange(0, 2**31 - 1)
+# param inter_shuffle_seed = DiscreteRange(0, 2**31 - 1)
 
 
 import numpy as np
@@ -81,16 +80,16 @@ else:
 start = Uniform(*ego_lane.centerline.points)
 start = (start[0] @ start[1])
 
-ego = new Car on start, facing roadDirection, with speed globalParameters.ego_speed, with observation 0, with cte 0
+ego = new Car on start, facing roadDirection, with observation 0, with cte 0
 
 
 #---------distractor cars
 dist_cars_id = list(range(globalParameters.distractor_cars))
 # random.shuffle(dist_cars_id)
 # inter_id = dist_cars_id[:globalParameters.intersection_cars]
-dist_cars_id = list(range(globalParameters.distractor_cars))
-rng = random.Random(globalParameters.inter_shuffle_seed)  
-rng.shuffle(dist_cars_id)
+# dist_cars_id = list(range(globalParameters.distractor_cars))
+# rng = random.Random(globalParameters.inter_shuffle_seed)  
+# rng.shuffle(dist_cars_id)
 inter_id = dist_cars_id[:globalParameters.intersection_cars]
 
 cluster_size = 3
