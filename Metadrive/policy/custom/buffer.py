@@ -223,35 +223,42 @@ class Buffer:
         self.categories[category_id].update(scene_id, new_pvl, new_params, new_scenario, new_bytes)
         return True
 
+    def _category_weights(self, filled, timesteps, total):
+        """Difficulty-progress weights over `filled` categories.
+        Returns None when uniform sampling is more appropriate:
+          - only one category to choose from,
+          - fewer than two distinct finite feature_nums (no curriculum ordering),
+          - or every computed weight collapses to zero.
+        """
+        if len(filled) <= 1:
+            return None
+        finite_feats = [c.feature_num for c in filled if math.isfinite(c.feature_num)]
+        if len(finite_feats) < 2 or len(set(finite_feats)) < 2:
+            return None
+        maxf = max(finite_feats)
+        progress = timesteps / total if total > 0 else 0.0
+        progress = min(max(progress, 0.0), 1.0)
+        weights = []
+        for c in filled:
+            if not math.isfinite(c.feature_num):
+                weights.append(1.0)   
+                continue
+            diff = c.feature_num / maxf
+            w = (1 - progress) * (1 - diff) + progress * diff
+            weights.append(w if (math.isfinite(w) and w >= 0) else 0.0)
+        if not any(w > 0 for w in weights):
+            return None
+        return weights
+
     #helper for getting scene for mutation
     def sample_category(self, timesteps, total):
-        filled = []
-        for n in self.categories.values():
-            if len(n.scene_list) > 0:
-                filled.append(n)
-
+        filled = [c for c in self.categories.values() if c.total_scenes() > 0]
         if len(filled) == 0:
             return None
-        
-        maxf =  1
-        for i in self.categories.values():
-            maxf =  max(maxf, i.feature_num)
-        
-        progress = timesteps/total
-        ##probability of picking category i, higher if feature num is lower and ealiers
-        w =[]
-        for i in filled:
-            diff = i.feature_num / maxf
-            ##1 - diff -> if difficulty is easy, more likely to be picked at beginning
-            ##1 - progress: if progress is l
-            prob = (1 - progress) * (1 - diff) + (progress * diff)
-            w.append(prob)
-
-        if sum(w) == 0:
-            w = [1.0] * len(filled) 
-
-        chosen = random.choices(filled, weights=w, k = 1)[0]
-        return chosen
+        weights = self._category_weights(filled, timesteps, total)
+        if weights is None:
+            return random.choice(filled)
+        return random.choices(filled, weights=weights, k=1)[0]
     
 
     ##select scene for mutation
@@ -280,16 +287,11 @@ class Buffer:
         non_empty = [c for c in self.categories.values() if c.total_scenes() >= 2]
         if not non_empty:
             return None
-        progress = agent_steps / total_timesteps
-        maxf = max(c.feature_num for c in self.categories.values())
-        w = []
-        for c in non_empty:
-            diff = c.feature_num / maxf
-            w.append((1 - progress) * (1 - diff) + progress * diff)
-        if sum(w) == 0:
-            w = [1.0] * len(non_empty)
-
-        category = random.choices(non_empty, weights=w, k=1)[0]
+        weights = self._category_weights(non_empty, agent_steps, total_timesteps)
+        if weights is None:
+            category = random.choice(non_empty)
+        else:
+            category = random.choices(non_empty, weights=weights, k=1)[0]
 
         # PVL-weighted within category (same as sample_scene)
         scene_weights = [max(s.pvl, 1e-6) for s in category.scene_list]
@@ -376,4 +378,4 @@ class Buffer:
 
     def bucket_occupancy(self):
         """kept for backward compatibility with gym_w_buffer.py — delegates to value_distribution"""
-        self.value_distribution()   
+        self.value_distribution()

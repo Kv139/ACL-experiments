@@ -58,17 +58,17 @@ def get_nearest_centerline(obj):
 
 def vehicleAheadBehindCheck(ego_obj,threshold, cone = 10 deg):
     for obj in simulation().objects:
-        if obj is ego_obj or not isinstance(obj, _model.Vehicle):
-            print("ignored")
+        if obj is ego_obj or not isinstance(obj, Vehicle):
+            # print("ignored")
             continue
         d = distance from ego_obj to obj
         if d> threshold:
-            print("ignored for distance")
+            # print("ignored for distance")
             continue
         vector_of_angle = angle from ego_obj to obj
         relative_angle = vector_of_angle - ego_obj.heading
         if abs(relative_angle) < cone or abs(relative_angle) >= (180 deg):
-            print("angle check")
+            # print("angle check")
             return True 
         return False
 
