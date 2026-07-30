@@ -224,29 +224,10 @@ class Buffer:
         return True
 
     def _category_weights(self, filled, timesteps, total):
-        """Difficulty-progress weights over `filled` categories.
-        Returns None when uniform sampling is more appropriate:
-          - only one category to choose from,
-          - fewer than two distinct finite feature_nums (no curriculum ordering),
-          - or every computed weight collapses to zero.
-        """
         if len(filled) <= 1:
             return None
-        finite_feats = [c.feature_num for c in filled if math.isfinite(c.feature_num)]
-        if len(finite_feats) < 2 or len(set(finite_feats)) < 2:
-            return None
-        maxf = max(finite_feats)
-        progress = timesteps / total if total > 0 else 0.0
-        progress = min(max(progress, 0.0), 1.0)
-        weights = []
-        for c in filled:
-            if not math.isfinite(c.feature_num):
-                weights.append(1.0)   
-                continue
-            diff = c.feature_num / maxf
-            w = (1 - progress) * (1 - diff) + progress * diff
-            weights.append(w if (math.isfinite(w) and w >= 0) else 0.0)
-        if not any(w > 0 for w in weights):
+        weights = [max(c.mean_pvl(), 1e-6) for c in filled]
+        if not any(w > 1e-9 for w in weights):
             return None
         return weights
 
