@@ -57,7 +57,7 @@ class Args:
     # Algorithm specific arguments
     env_id: str = "ACL_MetaDrive"
     """the id of the environment"""
-    total_timesteps: int = 10000
+    total_timesteps: int = 20000
     """total timesteps of the experiments"""
     learning_rate: float = 3e-4
     """the learning rate of the optimizer"""
@@ -98,6 +98,13 @@ class Args:
     num_iterations: int = 0
     """the number of iterations (computed in runtime)"""
 
+    """Total number of scenes to store in a single buffer"""
+    capacity: int = 100
+    """After how many episodes should genetic ops start"""
+    start_genetic: int = 25
+    """Generate a n X k dimensional buffer for retaining scenes"""
+    nk_buffer: bool = True
+
 
 def make_env(env_id, idx, capture_video, run_name, gamma):
     def thunk():
@@ -105,8 +112,7 @@ def make_env(env_id, idx, capture_video, run_name, gamma):
         scenario = (scenic.scenarioFromFile(args.scenic_file,
                                         model=args.model,
                                         mode2D=True,
-                                        params={"verifaiSamplerType": args.sampler_type,
-                                                "render": args.render}))
+                                        params={"verifaiSamplerType": args.sampler_type}))
 
         observation_space =observation_space=gym.spaces.Box(low=-np.inf, high=np.inf, shape=(268,))
         
@@ -119,7 +125,11 @@ def make_env(env_id, idx, capture_video, run_name, gamma):
             observation_space=observation_space,
             action_space=action_space,
             file = args.scenic_file,
-            genetic_flag = args.apply_genetic_ops,
+            genetic_flag = bool(args.apply_genetic_ops),
+            total_timesteps=args.total_timesteps,  
+            buffer_capacity=args.capacity,
+            start_genetic=args.start_genetic,
+            nk_buffer = bool(args.nk_buffer)       
         )
 
         env = gym.wrappers.FlattenObservation(env)  # deal with dm_control's Dict observation space
@@ -132,6 +142,7 @@ def make_env(env_id, idx, capture_video, run_name, gamma):
         return env
 
     return thunk
+
 
 
 def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
