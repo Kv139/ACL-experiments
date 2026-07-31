@@ -17,6 +17,7 @@ import tyro
 from torch.distributions.normal import Normal
 from torch.utils.tensorboard import SummaryWriter
 from custom.gym_w_buffer import CustomMetaDriveEnv
+from scenic import setDebuggingOptions
 # from custom.custom_gym import CustomMetaDriveEnv
 
 
@@ -193,13 +194,15 @@ class Agent(nn.Module):
 
 
 if __name__ == "__main__":
-    setDebuggingOptions(verbosity=2)
+    setDebuggingOptions(verbosity=0)
 
     args = tyro.cli(Args)
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+        setDebuggingOptions(verbosity=args.verbosity, fullBacktrace=False)
+
     if args.track:
         import wandb
 

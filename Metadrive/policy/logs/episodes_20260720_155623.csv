@@ -1,5 +1,0 @@
-episode,op_actual,category_id,generation_source,params_mutated,params_crossed,n_params_differ,ego_speed,ego_on_intersection,intersection_has_cars,distractor_cars,has_brake_checker,has_cluster,maximum_distractor_speed,distance_to_nearest,cluster_dist,brake_dist,intersection_cars,num_steps,reward_sum,pvl,failure,termination_reason
-0,fresh,0,fresh,,,0,0.0,0,0,0,0,0,10.0,5.0,5.0,20.0,0,999,47.74042510986328,0.7208336809290213,,max_step
-1,fresh,0,fresh,,,0,0.0,0,0,0,0,0,10.0,5.0,5.0,20.0,0,1000,20.246658325195312,0.37551553058903664,,max_step
-2,fresh,0,fresh,,,0,0.0,0,0,0,0,0,10.0,5.0,5.0,20.0,0,726,13.330120086669922,0.3712180349853957,,out_of_road
-3,fresh,0,fresh,,,0,0.0,0,0,0,0,0,10.0,5.0,5.0,20.0,0,1000,11.586970329284668,0.18598674545320681,,max_step
