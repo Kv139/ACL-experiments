@@ -25,8 +25,6 @@ import time
 
 from scenic.core.errors import setDebuggingOptions, InvalidScenarioError
 
-setDebuggingOptions(verbosity=0, fullBacktrace=False, debugExceptions=False, debugRejections=False)
-
 from dataclasses import dataclass, asdict, field
 
 @dataclass
@@ -275,7 +273,7 @@ class CustomMetaDriveEnv(gym.Env):
                     self.last_parent_params = None
                     scene = self.generate_fresh()
                     self.info['generations'] += 1
-                print(f"[episode {self.episode_counter+1}] params: {self.curr_full_params}")
+                #print(f"[episode {self.episode_counter+1}] params: {self.curr_full_params}")
                 # if self.episode_counter > 0 and self.episode_counter % 50 == 0:
                 #     self.buffer.summary(verbose=False)
 
@@ -283,7 +281,8 @@ class CustomMetaDriveEnv(gym.Env):
                     with self.simulator.simulateStepped(scene, maxSteps=self.max_steps) as simulation:
                         steps_taken = 0
                         self.episode_counter += 1
-                        print(f'{self.episode_counter}')
+
+                        #print(f'{self.episode_counter}')
         
                         done = lambda: (simulation.result is not None) or simulation.is_done()
                         truncated = lambda: (steps_taken >= self.max_steps) or simulation.get_truncation()
@@ -317,11 +316,6 @@ class CustomMetaDriveEnv(gym.Env):
                             simulation.actions = actions # TODO add action dict to simulation interfaces
                 except ResetException:
                     raise
-                except Exception as e:
-                    print(f"Simulator init failed: {type(e).__name__}: {e}. Skipping scene.")
-                    self.info['scenario_failures'] += 1
-                    self.last_failure = type(e).__name__
-                    continue
                     
             except ResetException:
                 continue
@@ -495,7 +489,7 @@ class CustomMetaDriveEnv(gym.Env):
         self.last_crossed_params = []
         self.last_parent_params = None
         if self.episode_counter % 10 == 0:
-            print(f"Counts: {self.info}")
+            #print(f"Counts: {self.info}")
             self.buffer.summary(verbose=False)
             self.buffer.bucket_occupancy()
 
@@ -608,7 +602,7 @@ class CustomMetaDriveEnv(gym.Env):
             scene, _ = self.scenario.generate()
             self.replay = False
             return scene
-        print(f"[read_scene_bytes] id={scene_id} took_path={'scenario' if scene.scenario is not None else 'params' if scene.params is not None else 'fall'}")
+        #print(f"[read_scene_bytes] id={scene_id} took_path={'scenario' if scene.scenario is not None else 'params' if scene.params is not None else 'fall'}")
         
         if (scene.scenario is not None): 
             fail = "scenario_failures"
@@ -620,7 +614,7 @@ class CustomMetaDriveEnv(gym.Env):
         try:
             return scene.read_scene(self.scenario, self.scenic_file)
         except (SerializationError, KeyError, RejectionException) as e: ##getting typerror issue
-            print(f"failed id was {scene_id}, scenario was genetic {fail}, error type was {e}")
+            #print(f"failed id was {scene_id}, scenario was genetic {fail}, error type was {e}")
             self.info[fail] += 1
             scene, _ = self.scenario.generate()
             self.replay = False
@@ -652,10 +646,11 @@ class CustomMetaDriveEnv(gym.Env):
                 new_scene, _ = scenario.generate()
                 self.curr_scenario = scenario
             except (RejectionException,RandomControlFlowError):
-                print(f"Control flow error with objects {objects}")
-                for i in range(len(scene.objects)):
-                    if i in objects:
-                        print(scene.objects[i])
+                #print(f"Control flow error with objects {objects}")
+                # for i in range(len(scene.objects)):
+                #     if i in objects:
+                #         print(scene.objects[i])
+                print("")
 
                 scenario = self.scenario
                 new_scene, _ = scenario.generate()
@@ -694,8 +689,8 @@ class CustomMetaDriveEnv(gym.Env):
         counted = {}
         for p in self.count_params:
             counted[p] = self.curr_full_params.get(p, 0)
-        print("counted: ", counted)
+        # print("counted: ", counted)
         
-        print(f"[episode {self.episode_counter+1}] PASSED: {params}")
-        print(f"[episode {self.episode_counter+1}] SCENE : {self.curr_full_params}")
+        # print(f"[episode {self.episode_counter+1}] PASSED: {params}")
+        # print(f"[episode {self.episode_counter+1}] SCENE : {self.curr_full_params}")
         return new_scene

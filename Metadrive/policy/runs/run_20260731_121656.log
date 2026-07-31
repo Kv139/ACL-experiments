@@ -1,0 +1,10 @@
+D:\SIP2026\.venv\lib\site-packages\tyro\_parsers.py:352: UserWarning: The field `wandb-entity` is annotated with type `<class 'str'>`, but the default value `None` has type `<class 'NoneType'>`. We'll try to handle this gracefully, but it may cause unexpected behavior.
+  warnings.warn(message)
+D:\SIP2026\.venv\lib\site-packages\tyro\_parsers.py:352: UserWarning: The field `target-kl` is annotated with type `<class 'float'>`, but the default value `None` has type `<class 'NoneType'>`. We'll try to handle this gracefully, but it may cause unexpected behavior.
+  warnings.warn(message)
+ Unrecognized options                   
+ -------------------------------------- 
+  Unrecognized options: 1               
+  --------------------------------------
+  For full helptext, run ppo.py --help  
+                                        
