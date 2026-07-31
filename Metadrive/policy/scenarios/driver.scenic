@@ -4,9 +4,11 @@ import random
 
 model scenic.simulators.metadrive.model
 
-param time_step = 1.0/10 
+param time_step = 1.0/10
 param verifaiSamplerType = 'halton'
 param use2DMap = True
+
+# param extra_cars = 0
 
 param distractor_cars = 0
 param has_brake_checker = 0
@@ -33,6 +35,7 @@ behavior brakeChecking(distanceToTrigger = 10):
         do FollowLaneBehavior(target_speed=5)
     interrupt when (distance from self to ego) < distanceToTrigger:
         while True:
+            print ("BREAKKK")
             take SetBrakeAction(1), SetThrottleAction(0)
 
 ##tailgater
@@ -104,6 +107,15 @@ start = (start[0] @ start[1])
 ego = new Car on start, facing roadDirection, with observation 0, with cte 0
 
 
+#---------distractor cars
+dist_cars_id = list(range(globalParameters.distractor_cars))
+# random.shuffle(dist_cars_id)
+# inter_id = dist_cars_id[:globalParameters.intersection_cars]
+# dist_cars_id = list(range(globalParameters.distractor_cars))
+# rng = random.Random(globalParameters.inter_shuffle_seed)  
+# rng.shuffle(dist_cars_id)
+inter_id = dist_cars_id[:globalParameters.intersection_cars]
+
 cluster_size = 3
 
 other_counter = 0
@@ -138,5 +150,3 @@ for i in range(globalParameters.distractor_cars):
         d_car = new Car on (random_point[0] @ random_point[1]), with behavior DriveAvoidCollisions(target_speed=Range(2, globalParameters.maximum_distractor_speed), avoidance_threshold=12)
         require (distance from ego to d_car) > min_dist
         other_counter += 1
-
-
