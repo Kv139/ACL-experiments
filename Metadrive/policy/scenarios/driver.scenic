@@ -14,7 +14,6 @@ param distractor_cars = 0
 param has_brake_checker = 0
 param intersection_cars = 0
 
-param ego_speed = 0
 param ego_on_intersection = 0
 param intersection_has_cars = 0
 param has_cluster = 0 ###has cluster fo cars in front of ego
@@ -25,7 +24,7 @@ param cluster_dist = 5
 
 param maximum_distractor_speed = 10
 param brake_dist = 20
-param inter_shuffle_seed = DiscreteRange(0, 2**31 - 1)
+# param inter_shuffle_seed = DiscreteRange(0, 2**31 - 1)
 
 
 import numpy as np
@@ -57,6 +56,30 @@ def get_nearest_centerline(obj):
             centerline = lane.centerline
     return centerline
 
+def vehicleAheadBehindCheck(ego_obj,threshold, cone = 10 deg):
+    for obj in simulation().objects:
+        if obj is ego_obj or not isinstance(obj, Vehicle):
+            # print("ignored")
+            continue
+        d = distance from ego_obj to obj
+        if d> threshold:
+            # print("ignored for distance")
+            continue
+        vector_of_angle = angle from ego_obj to obj
+        relative_angle = vector_of_angle - ego_obj.heading
+        if abs(relative_angle) < cone or abs(relative_angle) >= (180 deg):
+            # print("angle check")
+            return True 
+        return False
+
+
+behavior DriveAvoidCollisions(target_speed=25, avoidance_threshold=10, angle_threshold = 10 deg):
+    try:
+        do FollowLaneBehavior(target_speed=target_speed)
+    interrupt when vehicleAheadBehindCheck(self,avoidance_threshold, angle_threshold):
+        take SetThrottleAction(0), SetBrakeAction(1)
+
+
 lane_inter_obj = {} ##what intersection is each lane in
 for intersection in network.intersections:
     for lane in intersection.incomingLanes:
@@ -81,16 +104,16 @@ else:
 start = Uniform(*ego_lane.centerline.points)
 start = (start[0] @ start[1])
 
-ego = new Car on start, facing roadDirection, with speed globalParameters.ego_speed, with observation 0, with cte 0
+ego = new Car on start, facing roadDirection, with observation 0, with cte 0
 
 
 #---------distractor cars
 dist_cars_id = list(range(globalParameters.distractor_cars))
 # random.shuffle(dist_cars_id)
 # inter_id = dist_cars_id[:globalParameters.intersection_cars]
-dist_cars_id = list(range(globalParameters.distractor_cars))
-rng = random.Random(globalParameters.inter_shuffle_seed)  
-rng.shuffle(dist_cars_id)
+# dist_cars_id = list(range(globalParameters.distractor_cars))
+# rng = random.Random(globalParameters.inter_shuffle_seed)  
+# rng.shuffle(dist_cars_id)
 inter_id = dist_cars_id[:globalParameters.intersection_cars]
 
 cluster_size = 3
@@ -111,20 +134,20 @@ for i in range(globalParameters.distractor_cars):
             int_lane = Uniform(*inter_lane_obj)
         pt = Uniform(*int_lane.centerline.points)
         pos = (pt[0] @ pt[1])
-        new Car at pos, with behavior DriveAvoidingCollisions(target_speed=Range(2, globalParameters.maximum_distractor_speed), avoidance_threshold=12)
+        new Car at pos, with behavior DriveAvoidCollisions(target_speed=Range(2, globalParameters.maximum_distractor_speed), avoidance_threshold=12)
     elif other_counter == 0:
-        new Car ahead of ego by globalParameters.distance_to_nearest, facing roadDirection, with behavior DriveAvoidingCollisions(target_speed=Range(0, globalParameters.maximum_distractor_speed), avoidance_threshold=12)
+        new Car ahead of ego by globalParameters.distance_to_nearest, facing roadDirection, with behavior DriveAvoidCollisions(target_speed=Range(0, globalParameters.maximum_distractor_speed), avoidance_threshold=12)
         other_counter += 1
         cluster_placed += 1
     elif globalParameters.has_cluster == 1 and cluster_placed < cluster_size:
-        new Car ahead of ego by globalParameters.distance_to_nearest + globalParameters.cluster_dist * cluster_placed, facing roadDirection, with behavior DriveAvoidingCollisions(target_speed=Range(0, globalParameters.maximum_distractor_speed), avoidance_threshold=12)
+        new Car ahead of ego by globalParameters.distance_to_nearest + globalParameters.cluster_dist * cluster_placed, facing roadDirection, with behavior DriveAvoidCollisions(target_speed=Range(0, globalParameters.maximum_distractor_speed), avoidance_threshold=12)
         other_counter += 1
         cluster_placed += 1
     else:
         min_dist = globalParameters.distance_to_nearest
         random_lane = Uniform(*[l for l in network.lanes if not str(l.uid).startswith('lane_:')])
         random_point = Uniform(*random_lane.centerline.points)
-        d_car = new Car on (random_point[0] @ random_point[1]), with behavior DriveAvoidingCollisions(target_speed=Range(2, globalParameters.maximum_distractor_speed), avoidance_threshold=12)
+        d_car = new Car on (random_point[0] @ random_point[1]), with behavior DriveAvoidCollisions(target_speed=Range(2, globalParameters.maximum_distractor_speed), avoidance_threshold=12)
         require (distance from ego to d_car) > min_dist
         other_counter += 1
 

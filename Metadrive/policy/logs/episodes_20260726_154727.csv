@@ -1,0 +1,8 @@
+episode,op_actual,category_id,generation_source,params_mutated,params_crossed,n_params_differ,ego_on_intersection,intersection_has_cars,distractor_cars,has_brake_checker,has_cluster,maximum_distractor_speed,distance_to_nearest,cluster_dist,brake_dist,intersection_cars,num_steps,reward_sum,pvl,failure,termination_reason
+0,fresh,0,fresh,,,0,0,0,4,0,1,20.0,40.0,5.0,10.0,3,501,20.669742584228516,0.8298898681909025,,crash_vehicle
+1,fresh,0,fresh,,,0,0,0,18,1,1,5.0,40.0,5.0,55.0,2,1000,9.381046295166016,0.20213912617042662,,max_step
+2,fresh,0,fresh,,,0,0,0,12,0,1,20.0,20.0,15.0,35.0,0,1000,11.22048568725586,0.22813420763099565,,max_step
+3,fresh,0,fresh,,,0,1,0,3,1,1,15.0,40.0,5.0,55.0,0,1000,13.169419288635254,0.3055704742609523,,max_step
+4,fresh,0,fresh,,,0,0,0,3,0,1,15.0,20.0,10.0,55.0,3,1000,14.392914772033691,0.2570800973370206,,max_step
+5,fresh,0,fresh,,,0,0,0,0,1,0,10.0,20.0,10.0,55.0,0,1000,16.337677001953125,0.14457305907830595,,max_step
+6,fresh,0,fresh,,,0,0,0,1,1,0,10.0,10.0,5.0,20.0,1,696,3.2024927139282227,0.1406874875785601,,out_of_road

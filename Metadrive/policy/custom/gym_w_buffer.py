@@ -40,7 +40,6 @@ class EpisodeRecord:
     params_crossed: list = field(default_factory=list)
     n_params_differ: int = 0
     #paraeters
-    ego_speed: float = 0.0
     ego_on_intersection: int = 0
     intersection_has_cars: int = 0
     distractor_cars: int = 0
@@ -130,7 +129,6 @@ class CustomMetaDriveEnv(gym.Env):
             "select_road": {"choices": None, "group": "ego", "buckets": 1},
             "select_lane": {"choices": None, "group": "ego", "buckets": 1},
 
-            "ego_speed": {"choices": [5, 10, 15, 20], "group": "ego", "buckets": 2},
             "ego_on_intersection": {"choices": [0, 1], "group": "ego", "buckets": 2},
             "intersection_has_cars": {"choices": [0, 1], "group": "ego", "buckets": 2},
 
@@ -229,7 +227,6 @@ class CustomMetaDriveEnv(gym.Env):
             params_mutated=list(self.last_mutated_params),
             params_crossed=list(self.last_crossed_params),
             n_params_differ=n_differ,
-            ego_speed=float(p.get("ego_speed", 0.0)),
             ego_on_intersection=int(p.get("ego_on_intersection", 0)),
             intersection_has_cars=int(p.get("intersection_has_cars", 0)),
             distractor_cars=int(p.get("distractor_cars", 0)),
@@ -267,7 +264,15 @@ class CustomMetaDriveEnv(gym.Env):
                 if self.genetic_flag:           
                     scene = self.get_scene()
                 else:
-                    scene, _ = self.scenario.generate(feedback=self.feedback_result)
+                    # scene, _ = self.scenario.generate(feedback=self.feedback_result)
+                    # self.curr_full_params = dict(scene.params) if scene.params else {}
+                    self.replay = False
+                    self.gen_source = "fresh"
+                    self.last_mutated_params = []
+                    self.last_crossed_params = []
+                    self.last_parent_params = None
+                    scene = self.generate_fresh()
+                    self.info['generations'] += 1
                 print(f"[episode {self.episode_counter+1}] params: {self.curr_full_params}")
 
                 try:
@@ -578,6 +583,10 @@ class CustomMetaDriveEnv(gym.Env):
             for k in keys:
                 if k in scene.params:
                     params[k] = scene.params[k]
+
+        for k in groups[target]:
+            if self.parameters[k]["choices"] is not None:
+                params[k] = random.choice(self.parameters[k]["choices"])
         params = self.normalize_params(params)
         new_scene = self.generate_scene(params=params)
         return new_scene

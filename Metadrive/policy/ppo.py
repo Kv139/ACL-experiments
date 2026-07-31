@@ -64,13 +64,13 @@ class Args:
     """Path for model to evaluate"""
     model_name: str = "ep5_timesteps_1m_random_ng"
     """ model name"""
-    apply_genetic_ops = True
+    apply_genetic_ops : int = 0
     """ flag to signal genetic operations for scene contsruction"""
 
     # Algorithm specific arguments
     env_id: str = "ACL_MetaDrive"
     """the id of the environment"""
-    total_timesteps: int = 100000
+    total_timesteps: int = 1000000
     """total timesteps of the experiments"""
     learning_rate: float = 3e-4
     """the learning rate of the optimizer"""
@@ -112,9 +112,9 @@ class Args:
     """the number of iterations (computed in runtime)"""
 
 
-    capacity: int = 20
+    capacity: int = 100
     start_genetic: int = 25
-    nk_buffer: bool = True
+    nk_buffer: int = 0
 
 def make_env(env_id, idx, capture_video, run_name, gamma):
     def thunk():
@@ -135,11 +135,11 @@ def make_env(env_id, idx, capture_video, run_name, gamma):
             observation_space=observation_space,
             action_space=action_space,
             file = args.scenic_file,
-            genetic_flag = args.apply_genetic_ops,
+            genetic_flag = bool(args.apply_genetic_ops),
             total_timesteps=args.total_timesteps,  
             buffer_capacity=args.capacity,
             start_genetic=args.start_genetic,
-            nk_buffer = args.nk_buffer       
+            nk_buffer = bool(args.nk_buffer)       
         )
 
         env = gym.wrappers.FlattenObservation(env)  # deal with dm_control's Dict observation space
