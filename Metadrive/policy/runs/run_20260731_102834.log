@@ -1,0 +1,59 @@
+D:\SIP2026\.venv\lib\site-packages\tyro\_parsers.py:352: UserWarning: The field `wandb-entity` is annotated with type `<class 'str'>`, but the default value `None` has type `<class 'NoneType'>`. We'll try to handle this gracefully, but it may cause unexpected behavior.
+  warnings.warn(message)
+D:\SIP2026\.venv\lib\site-packages\tyro\_parsers.py:352: UserWarning: The field `target-kl` is annotated with type `<class 'float'>`, but the default value `None` has type `<class 'NoneType'>`. We'll try to handle this gracefully, but it may cause unexpected behavior.
+  warnings.warn(message)
+  Compiling Scenic module from D:\SIP2026\ACL-experiments\Metadrive\policy\scenarios\driver.scenic...
+    Compiling Scenic module from D:\SIP2026\Scenic\src\scenic\simulators\metadrive\model.scenic...
+      Compiling Scenic module from D:\SIP2026\Scenic\src\scenic\domains\driving\model.scenic...
+        Compiling Scenic module from D:\SIP2026\Scenic\src\scenic\domains\driving\behaviors.scenic...
+        Compiled Scenic module in 1.167 seconds.
+      Loading cached version of road network...
+      Loaded cached network in 0.57 seconds.
+      Compiled Scenic module in 3.122 seconds.
+    Compiled Scenic module in 3.485 seconds.
+  Compiled Scenic module in 5.166 seconds.
+  Pruning scenario...
+  Pruned scenario in 0 seconds.
+Counts: {'crossovers': 0, 'mutations': 0, 'replays': 0, 'generations': 0, 'param_failures': 0, 'scenario_failures': 0, 'generation_failures': 0}
+
+=== Buffer state | total scenes: 0 ===
+  cat 0 (feature_num<=1): empty
+  cat 1 (feature_num<=2): empty
+  cat 2 (feature_num<=3): empty
+  cat 3 (feature_num<=5): empty
+  cat 4 (feature_num<=8): empty
+  cat 5 (feature_num<=12): empty
+  cat 6 (feature_num<=18): empty
+=== Value distribution (all categories) ===
+Traceback (most recent call last; use -b to show Scenic internals):
+  File "D:\SIP2026\ACL-experiments\Metadrive\policy\ppo.py", line 249, in <module>
+    next_obs, _ = envs.reset(seed=args.seed)
+  File "D:\SIP2026\.venv\lib\site-packages\gymnasium\vector\sync_vector_env.py", line 228, in reset
+    self._env_obs[i], env_info = env.reset(
+  File "D:\SIP2026\.venv\lib\site-packages\gymnasium\core.py", line 333, in reset
+    return self.env.reset(seed=seed, options=options)
+  File "D:\SIP2026\.venv\lib\site-packages\gymnasium\core.py", line 333, in reset
+    return self.env.reset(seed=seed, options=options)
+  File "D:\SIP2026\.venv\lib\site-packages\gymnasium\core.py", line 553, in reset
+    obs, info = self.env.reset(seed=seed, options=options)
+  File "D:\SIP2026\.venv\lib\site-packages\gymnasium\core.py", line 553, in reset
+    obs, info = self.env.reset(seed=seed, options=options)
+  File "D:\SIP2026\.venv\lib\site-packages\gymnasium\core.py", line 333, in reset
+    return self.env.reset(seed=seed, options=options)
+  File "D:\SIP2026\.venv\lib\site-packages\gymnasium\wrappers\common.py", line 542, in reset
+    obs, info = super().reset(seed=seed, options=options)
+  File "D:\SIP2026\.venv\lib\site-packages\gymnasium\core.py", line 333, in reset
+    return self.env.reset(seed=seed, options=options)
+  File "D:\SIP2026\.venv\lib\site-packages\gymnasium\core.py", line 553, in reset
+    obs, info = self.env.reset(seed=seed, options=options)
+  File "D:\SIP2026\ACL-experiments\Metadrive\policy\custom\gym_w_buffer.py", line 337, in reset
+    observation, info = next(self.loop) # not doing self.scene.send(action) just yet
+  File "D:\SIP2026\ACL-experiments\Metadrive\policy\custom\gym_w_buffer.py", line 265, in _make_run_loop
+    scene = self.get_scene()
+  File "D:\SIP2026\ACL-experiments\Metadrive\policy\custom\gym_w_buffer.py", line 544, in get_scene
+    scene = self.generate_fresh()
+  File "D:\SIP2026\ACL-experiments\Metadrive\policy\custom\gym_w_buffer.py", line 479, in generate_fresh
+    return self.generate_scene(params=p)
+  File "D:\SIP2026\ACL-experiments\Metadrive\policy\custom\gym_w_buffer.py", line 668, in generate_scene
+    new_scene, _ = self.scenario.generate(params=params)
+TypeError: Scenario.generate() got an unexpected keyword argument 'params'

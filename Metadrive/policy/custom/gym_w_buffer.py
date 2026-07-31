@@ -164,6 +164,8 @@ class CustomMetaDriveEnv(gym.Env):
         self.curr_bytes = None ##prevoius scenes in bytes
         self.curr_params = None ##params for scenarios
         self.curr_scenario = None ##scenario objects
+        self._scenario_cache_key = None  # last compiled params key
+        self._scenario_cache = None      # last compiled scenario
 
         self.gae_lambda = 0.95
         self.gamma      = 0.99
@@ -274,6 +276,8 @@ class CustomMetaDriveEnv(gym.Env):
                     scene = self.generate_fresh()
                     self.info['generations'] += 1
                 print(f"[episode {self.episode_counter+1}] params: {self.curr_full_params}")
+                # if self.episode_counter > 0 and self.episode_counter % 50 == 0:
+                #     self.buffer.summary(verbose=False)
 
                 try:
                     with self.simulator.simulateStepped(scene, maxSteps=self.max_steps) as simulation:
@@ -659,8 +663,14 @@ class CustomMetaDriveEnv(gym.Env):
 
         ##params
         elif params != {} and objects is None:
-            try: 
-                scenario = scenic.scenarioFromFile(self.scenic_file, model="scenic.simulators.metadrive.model",mode2D=True,params=params)
+            try:
+                key = tuple(sorted(params.items()))
+                if self._scenario_cache is not None and key == self._scenario_cache_key:
+                    scenario = self._scenario_cache
+                else:
+                    scenario = scenic.scenarioFromFile(self.scenic_file, model="scenic.simulators.metadrive.model",mode2D=True,params=params)
+                    self._scenario_cache_key = key
+                    self._scenario_cache = scenario
             except InvalidScenarioError:
                 print('Invalid Scenario instance returning original program')
                 scenario = self.scenario
