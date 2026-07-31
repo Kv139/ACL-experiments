@@ -198,7 +198,7 @@ if __name__ == "__main__":
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
-        setDebuggingOptions(verbosity=args.verbosity, fullBacktrace=False)
+    setDebuggingOptions(verbosity=args.verbosity, fullBacktrace=False)
 
     if args.track:
         import wandb
