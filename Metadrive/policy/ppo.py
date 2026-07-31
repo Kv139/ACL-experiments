@@ -56,12 +56,7 @@ class Args:
     sampler_type: str = "random"
     """ sampling type for generating scenes"""
     save_model: bool = True
-    """whether ot save modle into the """
-
-    evaluate_model: bool = True
-    """ Choose whether to train or skip to evalutation"""
-    model_to_evaluate_path: str = "./final_models/ep5_timesteps_1m_random.cleanrl_model"
-    """Path for model to evaluate"""
+    """whether ot save model into the """
     model_name: str = "ep5_timesteps_1m_random_ng"
     """ model name"""
     apply_genetic_ops : int = 0
@@ -111,10 +106,12 @@ class Args:
     num_iterations: int = 0
     """the number of iterations (computed in runtime)"""
 
-
+    """Total number of scenes to store in a single buffer"""
     capacity: int = 100
+    """After how many episodes should genetic ops start"""
     start_genetic: int = 25
-    nk_buffer: int = 0
+    """Generate a n X k dimensional buffer for retaining scenes"""
+    nk_buffer: bool = True
 
 def make_env(env_id, idx, capture_video, run_name, gamma):
     def thunk():

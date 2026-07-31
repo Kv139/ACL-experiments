@@ -4,11 +4,9 @@ import random
 
 model scenic.simulators.metadrive.model
 
-param time_step = 1.0/10
+param time_step = 1.0/10 
 param verifaiSamplerType = 'halton'
 param use2DMap = True
-
-# param extra_cars = 0
 
 param distractor_cars = 0
 param has_brake_checker = 0
@@ -35,7 +33,6 @@ behavior brakeChecking(distanceToTrigger = 10):
         do FollowLaneBehavior(target_speed=5)
     interrupt when (distance from self to ego) < distanceToTrigger:
         while True:
-            print ("BREAKKK")
             take SetBrakeAction(1), SetThrottleAction(0)
 
 ##tailgater
@@ -107,15 +104,6 @@ start = (start[0] @ start[1])
 ego = new Car on start, facing roadDirection, with observation 0, with cte 0
 
 
-#---------distractor cars
-dist_cars_id = list(range(globalParameters.distractor_cars))
-# random.shuffle(dist_cars_id)
-# inter_id = dist_cars_id[:globalParameters.intersection_cars]
-# dist_cars_id = list(range(globalParameters.distractor_cars))
-# rng = random.Random(globalParameters.inter_shuffle_seed)  
-# rng.shuffle(dist_cars_id)
-inter_id = dist_cars_id[:globalParameters.intersection_cars]
-
 cluster_size = 3
 
 other_counter = 0
@@ -152,46 +140,3 @@ for i in range(globalParameters.distractor_cars):
         other_counter += 1
 
 
-monitor DrivingReward(obj):
-	curr_lane = obj._lane
-	while True:
-
-		if curr_lane is None or not curr_lane.containsPoint(obj.position):
-			curr_lane = obj._lane
-		
-		ego.previous_coordinates = obj.position
-		lane = obj._lane
-
-		if lane:
-			centerline = lane.centerline	
-		else:
-			centerline = get_nearest_centerline(obj)
-
-		if obj._lane:
-			ego.lane_heading = lane._defaultHeadingAt(ego.position)
-			orientation_error = np.abs(ego.heading - lane._defaultHeadingAt(ego.position))
-			ego.orientation_error = orientation_error
-
-			if orientation_error > .05:
-				orientation_error =  max(-orientation_error, -3)
-			else:
-				orientation_error = 1 # postive reward for the correct orientation
-
-		nearest_line_points = centerline.nearestSegmentTo(obj.position)
-		nearest_line_segment = PolylineRegion(nearest_line_points)
-		
-		cte = min(abs(distance to nearest_line_segment),1)
-		if cte < .2: 
-			cte = 0
-		speed_reward = max(0.5 * ego.speed, 2) # postiive reward for driving fast
-
-		dist_reward = distance to ego.previous_coordinates
-
-		reward =  -cte + speed_reward + orientation_error + dist_reward
-
-		ego.reward = reward
-
-		wait
-	
-
-require monitor DrivingReward(ego)
