@@ -1,0 +1,11 @@
+eval_episode=0, episodic_return=-1.854044005570902
+eval_episode=1, episodic_return=-2.09704905778868
+eval_episode=2, episodic_return=-1.8545485178458438
+eval_episode=3, episodic_return=-2.1077470410568697
+eval_episode=4, episodic_return=-2.0950538050421645
+eval_episode=5, episodic_return=2.432437712629734
+eval_episode=6, episodic_return=-2.1784830430054085
+eval_episode=7, episodic_return=-1.3404911250661296
+eval_episode=8, episodic_return=-2.0838731819318297
+eval_episode=9, episodic_return=-1.802156484009438
+mean_episodic_return=-1.498 +/- 1.331 over 10 episodes
