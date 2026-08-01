@@ -84,7 +84,8 @@ class CustomMetaDriveEnv(gym.Env):
                  buffer_capacity: int = 20,
                  start_genetic: int = 25,
                  log_dir: str = "logs",
-                 nk_buffer: bool = True
+                 nk_buffer: bool = True,
+                 run_name: str = "",
                  ):
 
         assert render_mode is None or render_mode in self.metadata["render_modes"]
@@ -187,10 +188,11 @@ class CustomMetaDriveEnv(gym.Env):
         self.last_failure = ""
         self.termination_reason = ""
         self.last_info = {}    
+        self.run_name = run_name
 
         os.makedirs(log_dir, exist_ok=True)
         timestamp = time.strftime("%Y%m%d_%H%M%S")
-        self.csv_path = os.path.join(log_dir, f"episodes_{timestamp}.csv")
+        self.csv_path = os.path.join(log_dir, f"episodes_{run_name}_{timestamp}.csv")
         self.csv_file = open(self.csv_path, "w", newline="")
         self.csv_writer = None
 

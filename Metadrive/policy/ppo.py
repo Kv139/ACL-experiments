@@ -112,7 +112,7 @@ class Args:
     """After how many episodes should genetic ops start"""
     start_genetic: int = 25
     """Generate a n X k dimensional buffer for retaining scenes"""
-    nk_buffer: bool = True
+    nk_buffer: int = 0
 
 def make_env(env_id, idx, capture_video, run_name, gamma):
     def thunk():
@@ -137,15 +137,14 @@ def make_env(env_id, idx, capture_video, run_name, gamma):
             total_timesteps=args.total_timesteps,  
             buffer_capacity=args.capacity,
             start_genetic=args.start_genetic,
-            nk_buffer = bool(args.nk_buffer)       
+            nk_buffer = bool(args.nk_buffer),
+            run_name = run_name,       
         )
 
         env = gym.wrappers.FlattenObservation(env)  # deal with dm_control's Dict observation space
         env = gym.wrappers.RecordEpisodeStatistics(env)
         env = gym.wrappers.ClipAction(env)
-        env = gym.wrappers.NormalizeObservation(env)
         env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10), observation_space=env.observation_space)
-        env = gym.wrappers.NormalizeReward(env, gamma=gamma)
         env = gym.wrappers.TransformReward(env, lambda reward: np.clip(reward, -10, 10))
         return env
 
@@ -197,8 +196,16 @@ if __name__ == "__main__":
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
-    run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
-    setDebuggingOptions(verbosity=args.verbosity, fullBacktrace=False)
+
+    if args.nk_buffer == 0 and args.apply_genetic_ops == 0:
+        run_type = "baseline"
+    elif args.nk_buffer ==1 and args.apply_genetic_ops ==1:
+        run_type = "nk_buffer"
+    else:
+        run_type = "acl"
+
+    run_name = f"{args.env_id}__{run_type}__{args.seed}__{int(time.time())}"
+    setDebuggingOptions(verbosity=0, fullBacktrace=False)
 
     if args.track:
         import wandb

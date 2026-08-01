@@ -265,9 +265,7 @@ class MetaDriveSimulation(DrivingSimulation):
         ego_obj = self.scene.objects[0]
         self.count += 1
         # action = ego_obj._collect_action()
-        self.observation, self.reward , self.done , _ , self.info = self.client.step([self.actions[0], self.actions[1]])  # Apply action in the simulator
-        if self.done:
-            print(f"Terminating Early!")
+        self.observation, self.reward , self.done , terminated , self.info = self.client.step([self.actions[0], self.actions[1]])  # Apply action in the simulator
         ego_obj._reset_control()
         # Render the scene in 2D if needed
         if self.render and not self.render3D:
@@ -284,9 +282,6 @@ class MetaDriveSimulation(DrivingSimulation):
         self.steps_taken += 1
 
     def destroy(self):
-
-        print(f"Terminating episode")
-
         if self.client and self.client.engine:
             object_ids = list(self.client.engine._spawned_objects.keys())
             if object_ids:

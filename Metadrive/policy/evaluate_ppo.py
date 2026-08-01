@@ -5,7 +5,7 @@ import time
 import scenic
 from dataclasses import dataclass
 from metadrive.component.sensors.semantic_camera import SemanticCamera
-from custom.custom_simulator import MetaDriveSimulation, MetaDriveSimulator 
+from custom.custom_simulator import MetaDriveSimulation, MetaDriveSimulator
 from scenic import setDebuggingOptions
 
 
@@ -18,7 +18,12 @@ import torch.optim as optim
 import tyro
 from torch.distributions.normal import Normal
 from torch.utils.tensorboard import SummaryWriter
-from custom.custom_gym import CustomMetaDriveEnv
+# MODIFIED: was `from custom.custom_gym import CustomMetaDriveEnv`.
+# custom_gym.CustomMetaDriveEnv.__init__ does not accept total_timesteps /
+# buffer_capacity / start_genetic / nk_buffer, which make_env has passed since
+# commit 536752e -- so the script raised TypeError before MetaDrive ever started.
+# gym_w_buffer is also the env the policies were actually trained under.
+from custom.gym_w_buffer import CustomMetaDriveEnv
 from typing import Callable
 
 @dataclass
@@ -33,7 +38,7 @@ class Args:
     """if toggled, cuda will be enabled by default"""
 
     # Scenic specific arguments
-    scenic_file: str = "./scenarios/driver.scenic" 
+    scenic_file: str = "./scenarios/driver.scenic"
     """the scenic program defining the enviroment"""
     max_steps: int = 1000
     """the maximum number of steps for any given episode"""
@@ -43,16 +48,24 @@ class Args:
     """ Sumo map for the env"""
     sampler_type: str = "random"
     """ sampling type for generating scenes"""
-    model_to_evaluate_path: str = "./runs/ACL_MetaDrive__ppo__1__1783623121/ppo.cleanrl_model"
+    # NOTE: this default points at a run directory that does not exist under runs/.
+    # Pass --model-to-evaluate-path explicitly.
+    model_to_evaluate_path: str = "./runs/ACL_MetaDrive__ppo__77__1785190664/ppo.cleanrl_model"
     """Path for model to evaluate"""
     model_name: str = "ep5_timesteps_1m_random_ng"
     """ model name"""
-    apply_genetic_ops = False
+    # MODIFIED: these three were missing type annotations, so dataclass/tyro treated
+    # them as plain class attributes rather than fields -- they could not be set from
+    # the CLI and did not appear in vars(args) for the hyperparameter dump.
+    apply_genetic_ops: int = 0
     """ flag to signal genetic operations for scene contsruction"""
-    render = 1
+    render: int = 1
     """ Whether to render the simulation or not"""
-    run_name = "ppo_eval_1"
+    run_name: str = "ppo_eval_1"
     """Target name for trial runs"""
+    # ADDED: number of episodes to evaluate over (was hard-coded at the call site).
+    eval_episodes: int = 10
+    """how many episodes to roll out for evaluation"""
 
     # Algorithm specific arguments
     env_id: str = "ACL_MetaDrive"
@@ -108,16 +121,21 @@ class Args:
 
 def make_env(env_id, idx, capture_video, run_name, gamma):
     def thunk():
-   
+
         scenario = (scenic.scenarioFromFile(args.scenic_file,
                                         model=args.model,
                                         mode2D=True,
                                         params={"verifaiSamplerType": args.sampler_type}))
 
         observation_space =observation_space=gym.spaces.Box(low=-np.inf, high=np.inf, shape=(268,))
-        
+
         action_space = gym.spaces.Box(low=np.array([-1,-1]), high=np.array([1,1]), shape=(2,), dtype=np.float32)  # Defines the possible actions of the agent
 
+        # MODIFIED: log_dir added so evaluation episode CSVs land in eval_logs/ instead
+        # of overwriting the training logs/ directory. Everything else is unchanged.
+        # NOTE: log_episode_stats() is never called during evaluation, so the pvl /
+        # reward_sum / num_steps columns in those CSVs stay at 0; the scene parameter
+        # columns and termination_reason are the useful part.
         env = CustomMetaDriveEnv(
             scenario=scenario,
             simulator=MetaDriveSimulator(sumo_map=args.map),
@@ -126,18 +144,23 @@ def make_env(env_id, idx, capture_video, run_name, gamma):
             action_space=action_space,
             file = args.scenic_file,
             genetic_flag = bool(args.apply_genetic_ops),
-            total_timesteps=args.total_timesteps,  
+            total_timesteps=args.total_timesteps,
             buffer_capacity=args.capacity,
             start_genetic=args.start_genetic,
-            nk_buffer = bool(args.nk_buffer)       
+            nk_buffer = bool(args.nk_buffer),
+            log_dir="eval_logs",
         )
 
+        # NOTE: the observation/reward normalization statistics are re-estimated from
+        # scratch here and keep updating during evaluation, because training only
+        # checkpoints agent.state_dict() and never saved its running means. Left as-is
+        # to match how the policy saw observations during training; if you start saving
+        # the wrapper statistics alongside the model, load them here and set
+        # `update_running_mean = False` on both wrappers instead.
         env = gym.wrappers.FlattenObservation(env)  # deal with dm_control's Dict observation space
         env = gym.wrappers.RecordEpisodeStatistics(env)
         env = gym.wrappers.ClipAction(env)
-        env = gym.wrappers.NormalizeObservation(env)
         env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10), observation_space=env.observation_space)
-        env = gym.wrappers.NormalizeReward(env, gamma=gamma)
         env = gym.wrappers.TransformReward(env, lambda reward: np.clip(reward, -10, 10))
         return env
 
@@ -181,7 +204,7 @@ class Agent(nn.Module):
         if action is None:
             action = probs.sample()
         return action, probs.log_prob(action).sum(1), probs.entropy().sum(1), self.critic(x)
-    
+
 
 
 def evaluate(
@@ -195,29 +218,58 @@ def evaluate(
     capture_video: bool = True,
     gamma: float = 0.99,
 ):
+    # MODIFIED: the whole body is wrapped in try/finally so that envs.close() always
+    # runs. This is the segfault fix. CustomMetaDriveEnv.loop is a generator suspended
+    # at a `yield` *inside* `with simulator.simulateStepped(...)`. If the env is left to
+    # the garbage collector, GeneratorExit unwinds that context manager at interpreter
+    # shutdown, running MetaDriveSimulation.destroy() -> client.engine.agent_manager
+    # .clear_objects(...) against Panda3D C++ objects that may already be torn down.
+    # Closing here unwinds it deterministically while the engine is still alive.
     envs = gym.vector.SyncVectorEnv([make_env(env_id, 0, capture_video, run_name, gamma)])
-    agent = Model(envs).to(device)
-    agent.load_state_dict(torch.load(model_path, map_location=device))
-    agent.eval()
+    try:
+        # MODIFIED: the agent is built and loaded here, from the one vector env this
+        # process owns. Previously __main__ built a second SyncVectorEnv purely to shape
+        # the network, which eagerly constructed a second MetaDrive DriveEnv -- and
+        # MetaDrive's engine (and Panda3D's ShowBase) is a process-wide singleton.
+        assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
-    obs, _ = envs.reset()
-    episodic_returns = []
-    while len(episodic_returns) < eval_episodes:
-        actions, _, _, _ = agent.get_action_and_value(torch.Tensor(obs).to(device))
-        next_obs, _, _, _, infos = envs.step(actions.cpu().numpy())
-        if "final_info" in infos:
-            for info in infos["final_info"]:
-                if "episode" not in info:
-                    continue
-                print(f"eval_episode={len(episodic_returns)}, episodic_return={info['episode']['r']}")
-                episodic_returns += [info["episode"]["r"]]
-        obs = next_obs
+        agent = Model(envs).to(device)
+        agent.load_state_dict(torch.load(model_path, map_location=device))
+        agent.eval()
 
-    return episodic_returns
+        obs, _ = envs.reset()
+        episodic_returns = []
+        while len(episodic_returns) < eval_episodes:
+            # MODIFIED: no_grad added. The action sampling itself is unchanged -- this
+            # is still a stochastic rollout from Normal(actor_mean, exp(actor_logstd)).
+            with torch.no_grad():
+                actions, _, _, _ = agent.get_action_and_value(torch.Tensor(obs).to(device))
+            obs, _, _, _, infos = envs.step(actions.cpu().numpy())
+
+
+            # MODIFIED: gymnasium 1.3.0 removed final_observation/final_info from the
+            # vector API and moved to next-step autoreset, so the old `if "final_info"
+            # in infos` branch was dead -- episodes finished but nothing was ever
+            # recorded, hence the infinite while loop. (The same dead branch in ppo.py
+            # is why no run under runs/ has a charts/episodic_return scalar.)
+            # Under 1.3.0, RecordEpisodeStatistics on the sub-env writes
+            # info["episode"] = {"r", "l", "t"} on the terminal step; SyncVectorEnv
+            # batches that into infos["episode"]["r"] (shape (num_envs,)) plus the
+            # completion mask infos["_episode"]. The mask is required: entries for
+            # envs that did not terminate this step are zeros, not returns.
+            if "episode" in infos:
+                for i in np.nonzero(infos["_episode"])[0]:
+                    episodic_return = float(infos["episode"]["r"][i])
+                    print(f"eval_episode={len(episodic_returns)}, episodic_return={episodic_return}")
+                    episodic_returns.append(episodic_return)
+
+        return episodic_returns
+    finally:
+        envs.close()
 
 
 if __name__ == "__main__":
-    setDebuggingOptions(verbosity=2)
+    setDebuggingOptions(verbosity=0)
 
     args = tyro.cli(Args)
     args.batch_size = int(args.num_envs * args.num_steps)
@@ -238,21 +290,16 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
-    # env setup
-    envs = gym.vector.SyncVectorEnv(
-        [make_env(args.env_id, i, False, run_name, args.gamma) for i in range(args.num_envs)]
-    )
-    assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
-
-    agent = Agent(envs)
-    agent.to(device)
-    model_path = args.model_to_evaluate_path
-
+    # MODIFIED: the module-level SyncVectorEnv, the isinstance assert and the throwaway
+    # Agent(envs) that used to live here are gone -- they built a second MetaDrive
+    # DriveEnv that was never reset, and then envs.close() at the bottom closed *that*
+    # one while the env holding the live engine was never closed at all. evaluate() now
+    # constructs, uses and closes the single env in this process.
     episodic_returns = evaluate(
-        model_path,
+        args.model_to_evaluate_path,
         make_env,
         args.env_id,
-        eval_episodes=10,
+        eval_episodes=args.eval_episodes,
         run_name=f"{run_name}-eval",
         Model=Agent,
         device=device,
@@ -261,6 +308,10 @@ if __name__ == "__main__":
     for idx, episodic_return in enumerate(episodic_returns):
         writer.add_scalar("eval/episodic_return", episodic_return, idx)
 
+    # MODIFIED: reports the aggregate the evaluation is actually for.
+    print(
+        f"mean_episodic_return={np.mean(episodic_returns):.3f} "
+        f"+/- {np.std(episodic_returns):.3f} over {len(episodic_returns)} episodes"
+    )
 
-    envs.close()
-    writer.close()
+    # writer.close()
