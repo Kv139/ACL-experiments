@@ -35,7 +35,6 @@ behavior brakeChecking(distanceToTrigger = 10):
         do FollowLaneBehavior(target_speed=5)
     interrupt when (distance from self to ego) < distanceToTrigger:
         while True:
-            print ("BREAKKK")
             take SetBrakeAction(1), SetThrottleAction(0)
 
 ##tailgater
