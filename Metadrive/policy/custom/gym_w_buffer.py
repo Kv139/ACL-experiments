@@ -300,6 +300,7 @@ class CustomMetaDriveEnv(gym.Env):
                             info = simulation.get_info()
                             self.last_info = info if isinstance(info, dict) else {}
                             reward = simulation.get_reward()
+                            self.episode_rewards.append(reward)
                             if done():
                                 self.termination_reason = self.get_term(info, simulation, steps_taken)
                                 self.last_step_truncated = (
